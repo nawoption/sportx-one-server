@@ -179,6 +179,37 @@ const canEditUser = async (req, res, next) => {
     }
 };
 
+const canEditAgent = async (req, res, next) => {
+    try {
+        const actor = getActor(req);
+        if (!actor) return res.status(401).json({ message: "Not authorized" });
+
+        const targetAgentId = req.params.id || (req.agent && req.agent._id);
+        if (!targetAgentId) return res.status(400).json({ message: "Target agent id is required" });
+
+        // Admins can edit any agent
+        if (actor.type === "Admin") return next();
+
+        // If the actor is the agent themself
+        if (actor.type === "Agent") {
+            if (String(actor.id) === String(targetAgentId)) return next();
+            return res.status(403).json({ message: "Forbidden: can only edit your own profile" });
+        }
+
+        // For Senior/Master: only allow if they created the target agent
+        const agent = await Agent.findById(targetAgentId).select("createdBy createdByModel");
+        if (!agent) return res.status(404).json({ message: "Agent not found" });
+
+        if (String(agent.createdBy) === String(actor.id) && agent.createdByModel === actor.type) {
+            return next();
+        }
+
+        return res.status(403).json({ message: "Forbidden: you can only edit agents you created" });
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
+    }
+};
+
 // Generic role checker to be used after a specific auth middleware has run
 const requireRole =
     (allowedTypes = []) =>
@@ -189,4 +220,4 @@ const requireRole =
         return res.status(403).json({ message: "Forbidden: insufficient role" });
     };
 
-module.exports = { adminAuth, seniorAuth, masterAuth, agentAuth, userAuth, canEditUser, requireRole };
+module.exports = { adminAuth, seniorAuth, masterAuth, agentAuth, userAuth, canEditUser, canEditAgent, requireRole };

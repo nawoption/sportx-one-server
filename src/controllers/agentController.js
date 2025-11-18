@@ -142,7 +142,11 @@ const agentController = {
         try {
             const { username, password, limit, commission } = req.body;
 
-            const createdBy = req.senior ? req.senior._id : req.master._id;
+            // Determine who is creating this user
+            const actor = req.admin || req.senior || req.master;
+            if (!actor) return res.status(403).json({ message: "unauthorized" });
+            const createdBy = actor._id;
+            const createdByModel = req.admin ? "Admin" : req.senior ? "Senior" : req.master ? "Master" : null;
 
             // Check if username already exists
             const existingagent = await Agent.findOne({ username });
@@ -166,7 +170,7 @@ const agentController = {
                 senior: req.senior ? req.senior._id : null,
                 master: req.master ? req.master._id : null,
                 createdBy,
-                createdByModel: req.admin ? "Admin" : "Senior",
+                createdByModel,
             });
 
             await newagent.save();
@@ -178,7 +182,7 @@ const agentController = {
         }
     },
 
-    getAllagents: async (req, res) => {
+    getAllAgents: async (req, res) => {
         try {
             let { page, limit, search, status } = req.query;
 
@@ -188,11 +192,20 @@ const agentController = {
 
             // build query
             let query = {};
+            if (req.admin) {
+                query.isDeleted = false;
+            } else {
+                const actor = req.senior || req.master || req.agent;
+                const actorType = req.senior ? "Senior" : req.master ? "Master" : "Agent";
+                query = {
+                    isDeleted: false,
+                    createdBy: actor._id,
+                    createdByModel: actorType,
+                };
+            }
+
             if (search) {
-                query.$or = [
-                    { name: { $regex: search, $options: "i" } },
-                    { username: { $regex: search, $options: "i" } },
-                ];
+                query.username = { $regex: search, $options: "i" };
             }
             if (status) query.status = status;
 

@@ -5,6 +5,7 @@ const agentSchema = new mongoose.Schema(
         username: { type: String, required: true, unique: true },
         password: { type: String, required: true },
         contact: { type: String },
+        role: { type: String, default: "Agent" },
         cashBalance: { type: Number, default: 0 },
         accountBalance: { type: Number, default: 0 },
         commissionSetting: { type: mongoose.Schema.Types.ObjectId, ref: "CommissionSetting" },
