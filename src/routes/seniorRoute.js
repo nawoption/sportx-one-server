@@ -13,13 +13,13 @@ router.post("/generate-access-token", seniorController.generateAccessToken);
 router.get("/verify-token", seniorAuth, seniorController.verifyToken);
 
 // Admin routes
-router.post("/register", validateBody(accountCreateSchema), adminAuth, seniorController.register);
-router.get("/all", adminAuth, seniorController.getAllSeniors);
-router.put("/:id/update-status", adminAuth, seniorController.updateStatus);
-router.put("/:id/reset-password", adminAuth, seniorController.resetPassword);
+router.post("/register/by-admin", validateBody(accountCreateSchema), adminAuth, seniorController.register);
+router.get("/all/by-admin", adminAuth, seniorController.getAllSeniors);
+router.put("/:id/update-status/by-admin", adminAuth, seniorController.updateStatus);
+router.put("/:id/reset-password/by-admin", adminAuth, seniorController.resetPassword);
 
 router
-    .route("/:id")
+    .route("/:id/by-admin")
     .get(adminAuth, seniorController.getProfile)
     .put(adminAuth, validateBody(accountUpdateSchema), seniorController.updateProfile)
     .delete(adminAuth, seniorController.deleteProfile);

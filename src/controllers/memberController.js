@@ -60,21 +60,68 @@ exports.getDownlineUsers = async (req, res) => {
         // Admin → Seniors + Masters + Agents + Users
         if (actor.type === "Admin") {
             const seniors = await Senior.find({ createdBy: actor.id });
+            // fetch balance accounts for each senior
+            for (let i = 0; i < seniors.length; i++) {
+                const balanceAccount = await BalanceAccount.findOne({ owner: seniors[i]._id, ownerModel: "Senior" });
+                seniors[i] = seniors[i].toObject();
+                seniors[i].balanceAccount = balanceAccount;
+            }
+
             const masters = await Master.find({
                 createdByModel: "Senior",
                 createdBy: { $in: seniors.map((s) => s._id) },
             });
+            // fetch balance accounts for each master
+            for (let i = 0; i < masters.length; i++) {
+                const balanceAccount = await BalanceAccount.findOne({ owner: masters[i]._id, ownerModel: "Master" });
+                masters[i] = masters[i].toObject();
+                masters[i].balanceAccount = balanceAccount;
+            }
+
             const agents = await Agent.find({
                 createdByModel: "Master",
                 createdBy: { $in: masters.map((m) => m._id) },
             });
+            // fetch balance accounts for each agent
+            for (let i = 0; i < agents.length; i++) {
+                const balanceAccount = await BalanceAccount.findOne({ owner: agents[i]._id, ownerModel: "Agent" });
+                agents[i] = agents[i].toObject();
+                agents[i].balanceAccount = balanceAccount;
+            }
+
             const users = await User.find({ createdByModel: "Agent", createdBy: { $in: agents.map((a) => a._id) } });
+            // fetch balance accounts for each agent
+            for (let i = 0; i < users.length; i++) {
+                const balanceAccount = await BalanceAccount.findOne({ owner: users[i]._id, ownerModel: "User" });
+                users[i] = users[i].toObject();
+                users[i].balanceAccount = balanceAccount;
+            }
 
             members = [
-                ...seniors.map((s) => ({ username: s.username, type: "Senior", _id: s._id })),
-                ...masters.map((m) => ({ username: m.username, type: "Master", _id: m._id })),
-                ...agents.map((a) => ({ username: a.username, type: "Agent", _id: a._id })),
-                ...users.map((u) => ({ username: u.username, type: "User", _id: u._id })),
+                ...seniors.map((s) => ({
+                    username: s.username,
+                    type: "Senior",
+                    cashBalance: s.balanceAccount.cashBalance,
+                    _id: s._id,
+                })),
+                ...masters.map((m) => ({
+                    username: m.username,
+                    type: "Master",
+                    cashBalance: m.balanceAccount.cashBalance,
+                    _id: m._id,
+                })),
+                ...agents.map((a) => ({
+                    username: a.username,
+                    type: "Agent",
+                    cashBalance: a.balanceAccount.cashBalance,
+                    _id: a._id,
+                })),
+                ...users.map((u) => ({
+                    username: u.username,
+                    type: "User",
+                    cashBalance: u.balanceAccount.cashBalance,
+                    _id: u._id,
+                })),
             ];
         }
 

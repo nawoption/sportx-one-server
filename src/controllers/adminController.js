@@ -1,6 +1,7 @@
 const Admin = require("../models/adminModel");
 const { comparePassword, hashPassword, generateAccessToken, generateRefreshToken } = require("../utils/helper");
 const BalanceAccount = require("../models/balanceAccountModel");
+
 const adminController = {
     // ------------------- LOGIN ADMIN -------------------
     adminLoign: async (req, res) => {
@@ -79,14 +80,16 @@ const adminController = {
     },
 
     // ------------------- GET SINGLE ADMIN -------------------
-    getAdminById: async (req, res) => {
-        const adminId = req.params.id;
+    getProfile: async (req, res) => {
+        const adminId = req.params.id || req.admin._id;
         try {
             const admin = await Admin.findById(adminId).select("-password");
             if (!admin) {
                 return res.status(404).json({ message: "Admin not found" });
             }
-            res.status(200).json(admin);
+            const balanceAccount = await BalanceAccount.findOne({ owner: admin._id, ownerModel: "Admin" });
+
+            res.status(200).json({ admin, balanceAccount });
         } catch (error) {
             console.error(error);
             res.status(500).json({ message: "Server error" });

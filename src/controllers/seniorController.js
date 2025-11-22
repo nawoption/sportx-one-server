@@ -2,6 +2,7 @@ const Senior = require("../models/seniorModel");
 const LimitSetting = require("../models/limitSettingModel");
 const CommissionSetting = require("../models/commissionSettingModel");
 const BalanceAccount = require("../models/balanceAccountModel");
+
 const {
     comparePassword,
     hashPassword,
@@ -201,6 +202,13 @@ const seniorController = {
                 .limit(limit)
                 .sort({ createdAt: -1 })
                 .select("-password");
+
+            // fetch balance accounts for each senior
+            for (let i = 0; i < seniors.length; i++) {
+                const balanceAccount = await BalanceAccount.findOne({ owner: seniors[i]._id, ownerModel: "Senior" });
+                seniors[i] = seniors[i].toObject();
+                seniors[i].balanceAccount = balanceAccount;
+            }
 
             res.status(200).json({
                 total,

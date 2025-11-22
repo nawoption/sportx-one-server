@@ -224,6 +224,13 @@ const masterController = {
                 .sort({ createdAt: -1 })
                 .select("-password");
 
+            // fetch balance accounts for each master
+            for (let i = 0; i < masters.length; i++) {
+                const balanceAccount = await BalanceAccount.findOne({ owner: masters[i]._id, ownerModel: "Master" });
+                masters[i] = masters[i].toObject();
+                masters[i].balanceAccount = balanceAccount;
+            }
+
             res.status(200).json({
                 total,
                 page,

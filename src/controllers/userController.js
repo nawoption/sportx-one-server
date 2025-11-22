@@ -222,6 +222,13 @@ const userController = {
             const total = await User.countDocuments(query);
             const users = await User.find(query).skip(skip).limit(limit).sort({ createdAt: -1 }).select("-password");
 
+            // fetch balance accounts for each agent
+            for (let i = 0; i < users.length; i++) {
+                const balanceAccount = await BalanceAccount.findOne({ owner: users[i]._id, ownerModel: "User" });
+                users[i] = users[i].toObject();
+                users[i].balanceAccount = balanceAccount;
+            }
+
             res.status(200).json({
                 total,
                 page,

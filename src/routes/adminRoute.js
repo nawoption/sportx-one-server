@@ -8,9 +8,7 @@ const { loginSchema, changePasswordSchema } = require("../validations/commonVali
 // admin routes
 router.post("/register", validateBody(createAdminSchema), adminController.createAdmin);
 router.post("/login", validateBody(loginSchema), adminController.adminLoign);
+router.get("/profile/detail", adminAuth, adminController.getProfile);
 router.put("/change-password", adminAuth, validateBody(changePasswordSchema), adminController.changePassword);
-router.get("/", adminAuth, adminController.getAllAdmins);
-
-router.route("/:id").get(adminAuth, adminController.getAdminById).delete(adminAuth, adminController.deleteAdmin);
 
 module.exports = router;
