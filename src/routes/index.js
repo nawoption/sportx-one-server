@@ -14,4 +14,6 @@ router.use("/payment-transaction", require("./paymentTransactionRoute"));
 
 router.use("/member", require("./memberRoute"));
 
+router.use("/sub-account", require("./subAccountRoute"));
+
 module.exports = router;

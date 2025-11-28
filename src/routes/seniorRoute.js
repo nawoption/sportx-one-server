@@ -1,16 +1,21 @@
 const seniorController = require("../controllers/seniorController");
 const router = require("express").Router();
-const { adminAuth, seniorAuth } = require("../middlewares/authMiddlewares");
+const { adminAuth, seniorAuth, seniorOrSubAuth } = require("../middlewares/authMiddlewares");
 const { validateBody } = require("../middlewares/validator");
 const { loginSchema, changePasswordSchema } = require("../validations/commonValidation");
 const { accountCreateSchema, accountUpdateSchema } = require("../validations/accountValidation");
 
 // Senior routes
 router.post("/login", validateBody(loginSchema), seniorController.login);
-router.get("/profile/detail", seniorAuth, seniorController.getProfile);
-router.put("/profile/change-password", seniorAuth, validateBody(changePasswordSchema), seniorController.changePassword);
+router.get("/profile/detail", seniorOrSubAuth, seniorController.getProfile);
+router.put(
+    "/profile/change-password",
+    seniorOrSubAuth,
+    validateBody(changePasswordSchema),
+    seniorController.changePassword
+);
 router.post("/generate-access-token", seniorController.generateAccessToken);
-router.get("/verify-token", seniorAuth, seniorController.verifyToken);
+router.get("/verify-token", seniorOrSubAuth, seniorController.verifyToken);
 
 // Admin routes
 router.post("/register/by-admin", validateBody(accountCreateSchema), adminAuth, seniorController.register);

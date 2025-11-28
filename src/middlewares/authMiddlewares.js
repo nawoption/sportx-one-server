@@ -3,6 +3,7 @@ const Senior = require("../models/seniorModel");
 const Master = require("../models/masterModel");
 const Agent = require("../models/agentModel");
 const User = require("../models/userModel");
+const SubAccount = require("../models/subAccountModel");
 const { verifyToken } = require("../utils/helper");
 
 // Verify token and attach admin to request
@@ -53,6 +54,50 @@ const seniorAuth = async (req, res, next) => {
 
     if (!token) {
         return res.status(401).json({ message: "Not authorized, no token" });
+    }
+};
+
+const seniorOrSubAuth = async (req, res, next) => {
+    let token;
+
+    if (req.headers.authorization?.startsWith("Bearer")) {
+        token = req.headers.authorization.split(" ")[1];
+    }
+
+    if (!token) {
+        return res.status(401).json({ message: "Not authorized, no token" });
+    }
+
+    try {
+        const decoded = verifyToken(token);
+
+        if (!decoded?.role) {
+            return res.status(401).json({ message: "Invalid token" });
+        }
+
+        // ✅ Senior Login
+        if (decoded.role === "Senior") {
+            const senior = await Senior.findById(decoded.id).select("-password");
+            if (!senior) return res.status(401).json({ message: "Senior not found" });
+
+            req.senior = senior;
+            req.role = "Senior";
+            return next();
+        }
+
+        // ✅ Sub-Senior Login
+        if (decoded.role === "SubSenior") {
+            const sub = await SubAccount.findById(decoded.id).select("-password");
+            if (!sub) return res.status(401).json({ message: "Sub-account not found" });
+
+            req.senior = sub;
+            req.role = "SubSenior";
+            return next();
+        }
+
+        return res.status(401).json({ message: "Unauthorized role" });
+    } catch (error) {
+        return res.status(401).json({ message: error.message });
     }
 };
 
@@ -184,11 +229,11 @@ const anyAuth = async (req, res, next) => {
 
 // Helper to determine who is making the request
 const getActor = (req) => {
-    if (req.admin) return { type: "Admin", id: req.admin._id };
-    if (req.senior) return { type: "Senior", id: req.senior._id };
-    if (req.master) return { type: "Master", id: req.master._id };
-    if (req.agent) return { type: "Agent", id: req.agent._id };
-    if (req.user) return { type: "User", id: req.user._id };
+    if (req.admin) return { type: "Admin", id: req.admin._id, user: req.admin };
+    if (req.senior) return { type: "Senior", id: req.senior._id, user: req.senior };
+    if (req.master) return { type: "Master", id: req.master._id, user: req.master };
+    if (req.agent) return { type: "Agent", id: req.agent._id, user: req.agent };
+    if (req.user) return { type: "User", id: req.user._id, user: req.user };
     return null;
 };
 
@@ -304,6 +349,7 @@ const requireRole =
 module.exports = {
     adminAuth,
     seniorAuth,
+    seniorOrSubAuth,
     masterAuth,
     agentAuth,
     userAuth,

@@ -2,6 +2,7 @@ const Senior = require("../models/seniorModel");
 const LimitSetting = require("../models/limitSettingModel");
 const CommissionSetting = require("../models/commissionSettingModel");
 const BalanceAccount = require("../models/balanceAccountModel");
+const SubAccount = require("../models/subAccountModel");
 
 const {
     comparePassword,
@@ -16,41 +17,56 @@ const seniorController = {
     login: async (req, res) => {
         try {
             const { username, password } = req.body;
+            // ✅ Try Senior Login First
+            let user = await Senior.findOne({ username, isDeleted: false })
+                .populate("limitSetting")
+                .populate("commissionSetting");
 
-            const senior = await Senior.findOne({ username, isDeleted: false, status: "ACTIVE" })
-                .populate("commissionSetting")
-                .populate("limitSetting");
-            if (!senior) {
-                return res.status(400).json({ message: "Invalid username or password" });
+            let role = "Senior";
+
+            // If not senior, try SubSenior
+            if (!user) {
+                user = await SubAccount.findOne({ username, isDeleted: false })
+                    .populate("limitSetting")
+                    .populate("commissionSetting");
+                role = "SubSenior";
             }
 
-            if (senior.status !== "ACTIVE") {
-                return res.status(403).json({ message: "senior is not active" });
-            }
+            if (!user) return res.status(400).json({ message: "Invalid username" });
 
-            // Check password
-            const isMatch = await comparePassword(password, senior.password);
-            if (!isMatch) {
-                return res.status(400).json({ message: "Invalid username or password" });
-            }
+            const isMatch = await comparePassword(password, user.password);
+            if (!isMatch) return res.status(400).json({ message: "Incorrect password" });
 
-            // Generate JWT tokens
-            const accessToken = generateAccessToken({ id: senior._id });
-            const refreshToken = generateRefreshToken({ id: senior._id });
+            // ✅ Create Token
+            const accessToken = generateAccessToken({ id: user._id, role });
+            const refreshToken = generateRefreshToken({ id: user._id, role });
             const token = { accessToken, refreshToken };
 
-            // Back to client
-            const balanceAccount = await BalanceAccount.findOne({ owner: senior._id, ownerModel: "Senior" });
+            // ✅ Get Balance
+            let balance;
 
-            res.status(200).json({
+            if (role === "Senior") {
+                balance = await BalanceAccount.findOne({
+                    owner: user._id,
+                    ownerModel: "Senior",
+                });
+            } else {
+                balance = await BalanceAccount.findOne({
+                    owner: user.createdBy, // senior id
+                    ownerModel: "Senior",
+                });
+            }
+
+            return res.status(200).json({
                 message: "Login successful",
+                type: role,
                 token,
-                user: { ...senior.toObject(), password: undefined },
-                balanceAccount,
+                user: { ...user.toObject(), password: undefined },
+                balance: balance,
             });
         } catch (error) {
             console.error(error);
-            res.status(500).json({ message: "Server error" });
+            res.status(500).json({ message: error.message });
         }
     },
 
@@ -58,18 +74,35 @@ const seniorController = {
         try {
             const id = req.params.id || req.senior._id;
 
-            const senior = await Senior.findById(id)
-                .populate("limitSetting")
-                .populate("commissionSetting")
-                .select("-password");
-
-            if (!senior) {
-                return res.status(404).json({ message: "senior not found" });
+            let user;
+            if (req.role == "Senior") {
+                user = await Senior.findById(id)
+                    .populate("limitSetting")
+                    .populate("commissionSetting")
+                    .select("-password");
+            } else {
+                user = await SubAccount.findById(id)
+                    .populate("limitSetting")
+                    .populate("commissionSetting")
+                    .select("-password");
             }
 
-            const balanceAccount = await BalanceAccount.findOne({ owner: senior._id, ownerModel: "Senior" });
+            if (!user) return res.status(400).json({ message: "Invalid username" });
+            let balance;
 
-            res.status(200).json({ senior, balanceAccount });
+            if (req.role === "Senior") {
+                balance = await BalanceAccount.findOne({
+                    owner: user._id,
+                    ownerModel: "Senior",
+                });
+            } else {
+                balance = await BalanceAccount.findOne({
+                    owner: user.createdBy, // senior id
+                    ownerModel: "Senior",
+                });
+            }
+
+            res.status(200).json({ type: req.role, user, balanceAccount: balance });
         } catch (error) {
             console.error(error);
             res.status(500).json({ message: "Server error" });
@@ -81,7 +114,12 @@ const seniorController = {
             const id = req.params.id || req.senior._id;
             const { oldPassword, newPassword } = req.body;
 
-            const senior = await Senior.findById(id);
+            let senior;
+            if (req.role == "Senior") {
+                senior = await Senior.findById(id);
+            } else {
+                senior = await SubAccount.findById(id);
+            }
             if (!senior) {
                 return res.status(404).json({ message: "senior not found" });
             }
@@ -94,6 +132,8 @@ const seniorController = {
 
             // Hash new password
             senior.password = await hashPassword(newPassword);
+            senior.isChangedPassword = true;
+
             await senior.save();
 
             res.status(200).json({ message: "Password changed successfully" });
@@ -104,8 +144,14 @@ const seniorController = {
 
     verifyToken: async (req, res) => {
         try {
-            const seniorId = req.senior.id;
-            const senior = await Senior.findById(seniorId).select("-password");
+            const id = req.senior._id;
+
+            let senior;
+            if (req.role == "Senior") {
+                senior = await Senior.findById(id);
+            } else {
+                senior = await SubAccount.findById(id);
+            }
             if (!senior) {
                 return res.status(404).json({ message: "senior not found" });
             }
