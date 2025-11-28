@@ -12,8 +12,7 @@ const commissionSettingSchema = new mongoose.Schema(
         oneX2Ft: { type: Number, default: 1.0 },
         csFt: { type: Number, default: 1.0 },
         eoFt: { type: Number, default: 1.0 },
-        createdBy: { type: mongoose.Schema.Types.ObjectId, refPath: "createdByModel" },
-        createdByModel: { type: String, enum: ["Admin", "Senior", "Master", "Agent"] },
+        createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "Account" },
     },
     { timestamps: true }
 );

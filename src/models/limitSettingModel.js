@@ -24,8 +24,7 @@ const limitSettingSchema = new mongoose.Schema(
         oneX2MinFT: { type: Number, default: 1000 },
         oneX2MaxFT: { type: Number, default: 500000 },
         // Created by
-        createdBy: { type: mongoose.Schema.Types.ObjectId, refPath: "createdByModel" },
-        createdByModel: { type: String, enum: ["Admin", "Senior", "Master", "Agent", "User"] },
+        createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "Account" },
     },
     { timestamps: true }
 );

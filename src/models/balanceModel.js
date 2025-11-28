@@ -1,16 +1,12 @@
 const mongoose = require("mongoose");
 
-const balanceAccountSchema = new mongoose.Schema(
+const balanceSchema = new mongoose.Schema(
     {
-        owner: {
+        account: {
             type: mongoose.Schema.Types.ObjectId,
+            ref: "Account",
             required: true,
-            refPath: "ownerModel",
-        },
-        ownerModel: {
-            type: String,
-            required: true,
-            enum: ["Admin", "Senior", "Master", "Agent", "User"],
+            unique: true,
         },
         cashBalance: { type: Number, default: 0 },
         accountBalance: { type: Number, default: 0 },
@@ -19,4 +15,4 @@ const balanceAccountSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
-module.exports = mongoose.model("BalanceAccount", balanceAccountSchema);
+module.exports = mongoose.model("Balance", balanceSchema);

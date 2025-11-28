@@ -1,6 +1,8 @@
 const mongoose = require("mongoose");
 const config = require("./index");
 
+const ensureDefaultAdmin = require("./seedAdmin");
+
 const connectDB = async () => {
     try {
         mongoose
@@ -9,6 +11,8 @@ const connectDB = async () => {
             })
             .then(async () => {
                 console.log("DB connected");
+                // Ensure a default admin exists on startup if none are present
+                await ensureDefaultAdmin();
             })
             .catch((err) => {
                 console.log("DB connection error", err);
