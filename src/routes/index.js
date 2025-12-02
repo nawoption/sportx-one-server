@@ -10,4 +10,8 @@ router.use("/balance", require("./balanceRoute"));
 
 router.use("/payment-transaction", require("./paymentRoute"));
 
+router.use("/bets", require("./betRoute"));
+
+router.use("/betlist", require("./betlistRoute"));
+
 module.exports = router;

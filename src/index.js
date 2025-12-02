@@ -4,6 +4,7 @@ const path = require("path");
 const cors = require("cors");
 const connectDB = require("./config/db");
 const config = require("./config");
+const cron = require("node-cron");
 
 // Middleware setup
 app.use(cors());
@@ -17,6 +18,14 @@ app.use("/api", require("./routes/index"));
 
 // Connect to Database
 connectDB();
+
+// Import settlement service for scheduled tasks
+const settlementService = require("./services/settlementService");
+
+// Schedule the job to run every 5 seconds for demonstration (change as needed)
+// cron.schedule("*/5 * * * * *", async () => {
+//     await settlementService.runSettlementJob();
+// });
 
 // 404 Error handling
 app.use((req, res, next) => {
