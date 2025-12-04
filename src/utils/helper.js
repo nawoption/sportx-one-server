@@ -12,7 +12,7 @@ module.exports = {
     },
 
     generateAccessToken: (payload) => {
-        return jwt.sign(payload, config.env.JWT_SECRET, { expiresIn: "1d" });
+        return jwt.sign(payload, config.env.JWT_SECRET, { expiresIn: config.env.JWT_EXPIRES_IN });
     },
 
     generateRefreshToken: (payload) => {

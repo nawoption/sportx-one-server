@@ -23,7 +23,7 @@ connectDB();
 const settlementService = require("./services/settlementService");
 
 // Schedule the job to run every 5 seconds for demonstration (change as needed)
-// cron.schedule("*/5 * * * * *", async () => {
+// cron.schedule("*/55 * * * * *", async () => {
 //     await settlementService.runSettlementJob();
 // });
 

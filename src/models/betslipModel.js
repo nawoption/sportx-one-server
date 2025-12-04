@@ -71,4 +71,6 @@ const betSlipSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
-module.exports = mongoose.model("BetSlip", betSlipSchema);
+// Check if the 'BetSlip' model has already been compiled by Mongoose.
+// If it has, use the existing model; otherwise, compile and register the new one.
+module.exports = mongoose.models.BetSlip ? mongoose.model("BetSlip") : mongoose.model("BetSlip", betSlipSchema);

@@ -1,4 +1,4 @@
-const BetSlip = require("../models/betslipModel");
+const BetSlip = require("../models/betSlipModel");
 const betController = require("../controllers/betController");
 // const resultsApi = require('./externalResultsApi'); // Module for external API integration
 
