@@ -18,4 +18,6 @@ router.use("/betlist", require("./betlistRoute"));
 
 router.use("/match-report", require("./matchReportRoute"));
 
+router.use("/matches", require("./matchRoute"));
+
 module.exports = router;

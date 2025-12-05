@@ -1,6 +1,5 @@
 const BetSlip = require("../models/betSlipModel");
-const Account = require("../models/accountModel"); // Assuming you have this for user details
-const Match = require("../models/matchModel"); // For linking match IDs to team names
+const Match = require("../models/matchModel");
 const downlineService = require("../services/downlineService");
 const mongoose = require("mongoose");
 
@@ -12,32 +11,29 @@ const mongoose = require("mongoose");
  * @returns {Promise<{loggedInObjectId: mongoose.Types.ObjectId, allUserIds: mongoose.Types.ObjectId[]}>}
  */
 const getHierarchyIds = async (userId) => {
+    if (!userId) {
+        throw new Error("User ID is required for hierarchy query.");
+    }
     const loggedInObjectId = new mongoose.Types.ObjectId(userId);
     const downlineIds = await downlineService.getAllDownlineIds(userId);
     const allUserIds = [loggedInObjectId, ...downlineIds];
     return { loggedInObjectId, allUserIds };
 };
 
-// --- 1. MEMBER OUTSTANDING REPORT (FIXED: Includes userId) ---
+// --- 1. MEMBER OUTSTANDING REPORT ---
 
-/**
- * Generates a summary report of total staked amount (outstanding value)
- * for all unsettled bets, grouped by the betting member.
- */
 exports.getMemberOutstandingReport = async (req, res) => {
     try {
         const { allUserIds } = await getHierarchyIds(req.user._id);
 
         const outstandingReport = await BetSlip.aggregate([
             {
-                // Filter for bets placed by the hierarchy members AND bets that are still 'pending'
                 $match: {
                     user: { $in: allUserIds },
                     status: "pending",
                 },
             },
             {
-                // Lookup the user details (username/usercode)
                 $lookup: {
                     from: "accounts",
                     localField: "user",
@@ -48,18 +44,16 @@ exports.getMemberOutstandingReport = async (req, res) => {
             },
             { $unwind: "$userDetails" },
             {
-                // Group by the betting member (user ID) and sum the total stake
                 $group: {
-                    _id: "$user", // This remains the user's ObjectId
+                    _id: "$user",
                     usercode: { $first: "$userDetails.username" },
                     totalOutstanding: { $sum: "$stake" },
                 },
             },
             {
-                // ADDED: userId for drill-down functionality
                 $project: {
                     _id: 0,
-                    userId: { $toString: "$_id" }, // Convert ObjectId to string for easy use in URL params
+                    userId: { $toString: "$_id" },
                     usercode: "$usercode",
                     totalOutstanding: "$totalOutstanding",
                 },
@@ -77,10 +71,10 @@ exports.getMemberOutstandingReport = async (req, res) => {
     }
 };
 
-// --- 2. MEMBER BET DETAIL REPORT (FIXED: Uses req.params and strict pending filter) ---
+// --- 2. MEMBER BET DETAIL REPORT (UPDATED FIELD NAMES) ---
+
 exports.getMemberBetDetailReport = async (req, res) => {
     try {
-        // Read targetUserId from URL parameters (req.params) for specific user drill-down
         const { startDate, endDate, minAmount, maxAmount } = req.query;
         const targetUserId = req.params.targetUserId;
 
@@ -89,7 +83,6 @@ exports.getMemberBetDetailReport = async (req, res) => {
         }
 
         let matchQuery = {
-            // Filter strictly by the target user ID and pending status for the outstanding drill-down view
             user: new mongoose.Types.ObjectId(targetUserId),
             status: "pending",
         };
@@ -101,7 +94,6 @@ exports.getMemberBetDetailReport = async (req, res) => {
             };
         }
 
-        // Add optional amount filters
         if (minAmount) {
             matchQuery.stake = { ...matchQuery.stake, $gte: parseFloat(minAmount) };
         }
@@ -113,7 +105,6 @@ exports.getMemberBetDetailReport = async (req, res) => {
         const detailReport = await BetSlip.aggregate([
             { $match: matchQuery },
 
-            // 1. Lookup User Details (for username)
             {
                 $lookup: {
                     from: "accounts",
@@ -125,7 +116,6 @@ exports.getMemberBetDetailReport = async (req, res) => {
             },
             { $unwind: "$userDetails" },
 
-            // 2. Prepare Match IDs for lookup
             {
                 $project: {
                     usercode: "$userDetails.username",
@@ -135,53 +125,48 @@ exports.getMemberBetDetailReport = async (req, res) => {
                     status: 1,
                     winLoss: "$profit",
                     date: "$createdAt",
-                    // Extract match ID from the first leg for the Match lookup
-                    matchId: {
-                        $cond: {
-                            if: { $eq: ["$betType", "single"] },
-                            then: "$single.match",
-                            else: { $arrayElemAt: ["$parlay.match", 0] },
-                        },
-                    },
-                    legs: {
-                        $cond: {
-                            if: { $eq: ["$betType", "single"] },
-                            then: ["$single"],
-                            else: "$parlay",
-                        },
-                    },
+                    legs: "$legs",
+                    // Extract the Match ObjectId from the first leg
+                    matchObjectId: { $arrayElemAt: ["$legs.match", 0] },
                 },
             },
 
-            // 3. Lookup Match Details (Teams)
             {
                 $lookup: {
                     from: "matches",
-                    localField: "matchId",
-                    foreignField: "apiMatchId",
+                    localField: "matchObjectId",
+                    foreignField: "_id",
                     as: "matchDetails",
+                    // Request specific team fields
                     pipeline: [{ $project: { homeTeam: 1, awayTeam: 1 } }],
                 },
             },
             { $unwind: { path: "$matchDetails", preserveNullAndEmptyArrays: true } },
 
-            // 4. Final Projection for UI Display
             {
                 $project: {
                     slipId: { $toString: "$slipId" },
                     usercode: 1,
                     amount: "$stake",
                     status: 1,
-                    winLoss: { $ifNull: ["$winLoss", 0] }, // Outstanding profit is usually 0 until settled
+                    winLoss: { $ifNull: ["$winLoss", 0] },
                     date: "$date",
 
+                    // --- FIX: Use homeTeam/awayTeam directly ---
                     matchName: {
-                        $concat: [
-                            { $ifNull: ["$matchDetails.homeTeam", "Unknown Home"] },
-                            " Vs ",
-                            { $ifNull: ["$matchDetails.awayTeam", "Unknown Away"] },
-                        ],
+                        $cond: {
+                            if: { $ne: ["$matchDetails", null] },
+                            then: {
+                                $concat: [
+                                    { $ifNull: ["$matchDetails.homeTeam", "Unknown Home"] },
+                                    " Vs ",
+                                    { $ifNull: ["$matchDetails.awayTeam", "Unknown Away"] },
+                                ],
+                            },
+                            else: "Unknown Home Vs Unknown Away",
+                        },
                     },
+                    // ------------------------------------------
 
                     detailSummary: {
                         $concat: ["$betType", " (", { $toString: { $size: "$legs" } }, " legs)"],
@@ -202,12 +187,8 @@ exports.getMemberBetDetailReport = async (req, res) => {
     }
 };
 
-// --- 3. ORIGINAL BODY/OU REPORT ---
+// --- 3. GENERATE BODY/OU REPORT (FIXED: SAFER MATCH NAME CONCATENATION & FIELDS) ---
 
-/**
- * Generates a summary report of total staked amounts grouped by match,
- * period (Full Time/Half Time), and market (Home/Away/Over/Under).
- */
 exports.generateBodyOuReport = async (req, res) => {
     try {
         const { startDate, endDate } = req.query;
@@ -217,20 +198,13 @@ exports.generateBodyOuReport = async (req, res) => {
             {
                 $match: {
                     user: { $in: allUserIds },
-                    status: { $in: ["won", "lost", "half-won", "half-lost", "push"] },
                     createdAt: { $gte: new Date(startDate), $lte: new Date(endDate) },
                 },
             },
             {
                 $project: {
-                    stake: "$stake",
-                    legs: {
-                        $cond: {
-                            if: { $eq: ["$betType", "single"] },
-                            then: ["$single"],
-                            else: "$parlay",
-                        },
-                    },
+                    stake: 1,
+                    legs: 1,
                 },
             },
             { $unwind: "$legs" },
@@ -242,7 +216,7 @@ exports.generateBodyOuReport = async (req, res) => {
             {
                 $group: {
                     _id: {
-                        match: "$legs.match",
+                        match: "$legs.match", // Match ObjectId
                         period: "$legs.period",
                     },
                     homeStake: { $sum: { $cond: [{ $eq: ["$legs.market", "home"] }, "$stake", 0] } },
@@ -253,7 +227,7 @@ exports.generateBodyOuReport = async (req, res) => {
             },
             {
                 $group: {
-                    _id: "$_id.match",
+                    _id: "$_id.match", // Match ObjectId
                     HomeFT: { $sum: { $cond: [{ $eq: ["$_id.period", "full-time"] }, "$homeStake", 0] } },
                     AwayFT: { $sum: { $cond: [{ $eq: ["$_id.period", "full-time"] }, "$awayStake", 0] } },
                     OverFT: { $sum: { $cond: [{ $eq: ["$_id.period", "full-time"] }, "$overStake", 0] } },
@@ -264,13 +238,15 @@ exports.generateBodyOuReport = async (req, res) => {
                     UnderHT: { $sum: { $cond: [{ $eq: ["$_id.period", "half-time"] }, "$underStake", 0] } },
                 },
             },
+            // Lookup Match Details using the Match ObjectId (_id from the Match collection)
             {
                 $lookup: {
                     from: "matches",
                     localField: "_id",
-                    foreignField: "apiMatchId",
+                    foreignField: "_id",
                     as: "matchDetails",
-                    pipeline: [{ $project: { homeTeam: 1, awayTeam: 1, startTime: 1 } }],
+                    // Request specific team fields
+                    pipeline: [{ $project: { homeTeam: 1, awayTeam: 1, startTime: 1, apiMatchId: 1 } }],
                 },
             },
             {
@@ -281,14 +257,25 @@ exports.generateBodyOuReport = async (req, res) => {
             },
             {
                 $project: {
-                    matchId: "$_id",
+                    matchObjectId: "$_id",
+                    matchId: "$matchDetails.apiMatchId",
+
+                    // --- FIX: Use homeTeam/awayTeam directly in safe $cond ---
                     match: {
-                        $concat: [
-                            { $ifNull: ["$matchDetails.homeTeam", "Unknown Home"] },
-                            " Vs ",
-                            { $ifNull: ["$matchDetails.awayTeam", "Unknown Away"] },
-                        ],
+                        $cond: {
+                            if: { $ne: ["$matchDetails", null] },
+                            then: {
+                                $concat: [
+                                    { $ifNull: ["$matchDetails.homeTeam", "Unknown Home"] },
+                                    " Vs ",
+                                    { $ifNull: ["$matchDetails.awayTeam", "Unknown Away"] },
+                                ],
+                            },
+                            else: "Unknown Home Vs Unknown Away",
+                        },
                     },
+                    // --------------------------------------------------------
+
                     date: { $ifNull: ["$matchDetails.startTime", null] },
 
                     FullTime: {
@@ -318,16 +305,12 @@ exports.generateBodyOuReport = async (req, res) => {
     }
 };
 
-// --- 4. MATCH STOCK DETAIL REPORT (NEW: Drill-down from Body/OU Report) ---
+// --- 4. MATCH STOCK DETAIL REPORT (UPDATED FIELD NAMES) ---
 
-/**
- * Generates a drill-down list of bet slips for a specific match, period, and market category (Body or O/U).
- * This report is accessed by clicking the "Stock" total in the Body/OU summary report.
- */
 exports.getMatchStockDetailReport = async (req, res) => {
     try {
-        const { matchId, period } = req.params; // e.g., matchId=422668, period=full-time
-        const { marketType } = req.query; // e.g., marketType=home, marketType=over
+        const { matchId, period } = req.params;
+        const { marketType } = req.query;
 
         if (!matchId || !period || !marketType) {
             return res.status(400).json({ error: "Match ID, period, and market type are required." });
@@ -335,51 +318,44 @@ exports.getMatchStockDetailReport = async (req, res) => {
 
         const { allUserIds } = await getHierarchyIds(req.user._id);
 
-        // 1. Set up the initial query for settled bets within the agent's hierarchy
+        // Find match ObjectId using API ID
+        const matchDoc = await Match.findOne({ apiMatchId: matchId }).select("_id homeTeam awayTeam league").lean();
+
+        if (!matchDoc) {
+            return res.status(404).json({ error: "Match not found in database." });
+        }
+
+        const matchObjectId = matchDoc._id;
+
         const matchQuery = {
             user: { $in: allUserIds },
-            // Only settled bets are included in the Body/OU Stock report
-            status: { $in: ["won", "lost", "half-won", "half-lost", "push"] },
+            status: { $in: ["pending", "won", "lost", "half-won", "half-lost", "push"] },
+            "legs.match": matchObjectId,
         };
 
-        const testData = await BetSlip.find(matchQuery).limit(5);
-        console.log("Test Data Sample:", testData);
-
-        // 2. Aggregation Pipeline to find specific legs
         const detailReport = await BetSlip.aggregate([
             { $match: matchQuery },
 
-            // Project the legs array and the stake
             {
                 $project: {
-                    stake: "$stake",
-                    user: "$user",
-                    legs: {
-                        $cond: {
-                            if: { $eq: ["$betType", "single"] },
-                            then: ["$single"],
-                            else: "$parlay",
-                        },
-                    },
+                    stake: 1,
+                    user: 1,
+                    legs: 1,
                     createdAt: 1,
                 },
             },
 
-            // Unwind to process each leg individually
             { $unwind: "$legs" },
 
-            // Filter the legs based on the drill-down parameters
             {
                 $match: {
-                    "legs.match": matchId,
+                    "legs.match": matchObjectId,
                     "legs.period": period,
                     "legs.market": marketType,
-                    // Ensure we are only looking at Body or Over/Under category legs
                     "legs.betCategory": { $in: ["body", "overUnder"] },
                 },
             },
 
-            // 3. Lookup User Details (to get Usercode)
             {
                 $lookup: {
                     from: "accounts",
@@ -391,41 +367,41 @@ exports.getMatchStockDetailReport = async (req, res) => {
             },
             { $unwind: "$userDetails" },
 
-            // 4. Lookup Match Details (to get teams and start time)
+            // Lookup Match Details again to ensure we get the latest data if needed
             {
                 $lookup: {
                     from: "matches",
                     localField: "legs.match",
-                    foreignField: "apiMatchId",
+                    foreignField: "_id",
                     as: "matchDetails",
+                    // Request specific team fields
                     pipeline: [{ $project: { homeTeam: 1, awayTeam: 1, startTime: 1, league: 1 } }],
                 },
             },
             { $unwind: "$matchDetails" },
 
-            // 5. Final Projection to match the Stock Detail UI structure
+            // 5. Final Projection
             {
                 $project: {
                     _id: 0,
-                    slipId: { $toString: "$_id" }, // BetSlip ID
+                    slipId: { $toString: "$_id" },
                     usercode: "$userDetails.username",
                     date: "$createdAt",
                     amount: "$stake",
 
-                    // Create the Detail text: Line/Odds @ Period
                     detail: {
                         $concat: [
                             "$legs.line",
                             " @ ",
                             { $toString: "$legs.odds" },
                             " (",
-                            "$legs.market", // e.g., home, over
+                            "$legs.market",
                             ") @ ",
-                            "$legs.period", // e.g., full-time
+                            "$legs.period",
                         ],
                     },
 
-                    // Include match info for the header
+                    // --- FIX: Use homeTeam/awayTeam and league fields ---
                     matchInfo: {
                         homeTeam: "$matchDetails.homeTeam",
                         awayTeam: "$matchDetails.awayTeam",
@@ -433,22 +409,19 @@ exports.getMatchStockDetailReport = async (req, res) => {
                         league: "$matchDetails.league",
                         period: "$legs.period",
                     },
+                    // ----------------------------------------------------
 
-                    // Grouping key for client-side sorting (Lazio/AC Milan, Over/Under)
                     groupKey: "$legs.market",
                 },
             },
             { $sort: { date: 1 } },
         ]);
 
-        // Structure the output to separate the results for Home/Away or Over/Under on the client side
         const groupedReport = {
             matchInfo: detailReport.length > 0 ? detailReport[0].matchInfo : null,
-            // Filter the results into the two categories
             primaryMarket: detailReport.filter((item) => ["home", "over"].includes(item.groupKey)),
             secondaryMarket: detailReport.filter((item) => ["away", "under"].includes(item.groupKey)),
         };
-        console.log(groupedReport);
 
         res.json({
             success: true,

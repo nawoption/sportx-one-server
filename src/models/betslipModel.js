@@ -1,76 +1,95 @@
 const mongoose = require("mongoose");
 
-const betOptionSchema = new mongoose.Schema(
+// --- 1. Bet Leg Schema ---
+// Defines a single selection within a BetSlip (used for both single and parlay)
+const BetLegSchema = new mongoose.Schema(
     {
-        match: { type: String, required: true },
-        period: {
-            type: String,
-            enum: ["full-time", "half-time"],
+        // Match Identifier
+        match: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Match",
             required: true,
         },
+
+        // Market Details
         betCategory: {
             type: String,
-            enum: ["body", "overUnder"],
             required: true,
+            enum: ["body", "overUnder", "correctScore", "mixParlay"], // Simplified categories
         },
         market: {
             type: String,
-            enum: ["home", "away", "over", "under"],
             required: true,
+            enum: ["home", "away", "over", "under"],
         },
-        odds: { type: Number, required: true },
-        handicapLine: { type: Number, required: true },
-        detail: { type: String },
-        legStatus: {
+        period: {
+            type: String,
+            required: true,
+            enum: ["full-time", "half-time"],
+        },
+
+        // Line and Odds at the time of placing the bet (Crucial for Settlement)
+        line: { type: String, required: true }, // The handicap line (e.g., "-2" or "4")
+        odds: { type: Number, required: true }, // The price (e.g., 0.90 or 1.25)
+
+        // Settlement Data (Updated by SettlementService)
+        outcome: {
             type: String,
             enum: ["unsettled", "won", "lost", "half-won", "half-lost", "push", "cancelled"],
             default: "unsettled",
         },
-        legMultiplier: { type: Number, default: 0 },
+        payoutMultiplier: { type: Number, default: 0 }, // 1.0 for won, 0.5 for half-won, 0 for lost/push/half-lost
     },
     { _id: false }
 );
 
-const betSlipSchema = new mongoose.Schema(
-    {
-        user: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "Account",
-            required: true,
-        },
-        slipId: {
-            type: String,
-            required: true,
-            unique: true,
-        },
-        betType: {
-            type: String,
-            enum: ["single", "parlay"],
-            required: true,
-        },
-        single: { type: betOptionSchema, default: null },
-        parlay: { type: [betOptionSchema], default: [] },
-        stake: { type: Number, required: true },
-
-        systemMessage: { type: String, default: null },
-        payout: { type: Number, default: 0 },
-        profit: { type: Number, default: 0 },
-        ipAddress: { type: String },
-        deviceInfo: { type: String },
-        status: {
-            type: String,
-            enum: ["pending", "won", "lost", "cancelled", "half-won", "half-lost"],
-            default: "pending",
-        },
-        conditions: {
-            type: String,
-            enum: ["accepted", "paidout", "rejected"],
-            default: "accepted",
-        },
+// --- 2. Bet Slip Main Schema ---
+const BetSlipSchema = new mongoose.Schema({
+    // User Info
+    user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Account",
+        required: true,
+        index: true,
     },
-    { timestamps: true }
-);
+    slipId: {
+        type: String,
+        required: true,
+        unique: true,
+    },
+    // Bet Details
+    betType: {
+        type: String,
+        required: true,
+        enum: ["single", "parlay"],
+    },
+    stake: { type: Number, required: true }, // Amount staked
+    totalOdds: { type: Number, required: true }, // Total calculated odds for the slip
+
+    // Legs (Only one leg for 'single', multiple legs for 'parlay')
+    legs: [BetLegSchema],
+
+    // Settlement Status
+    status: {
+        type: String,
+        required: true,
+        enum: ["pending", "won", "lost", "half-won", "half-lost", "push", "cancelled"],
+        default: "pending",
+        index: true,
+    },
+    conditions: {
+        type: String,
+        enum: ["accepted", "paidout", "rejected"],
+        default: "accepted",
+    },
+    // Financial Outcomes
+    profit: { type: Number, default: 0 }, // Net profit (Payout - Stake)
+    payout: { type: Number, default: 0 }, // Total return (Stake + Profit)
+
+    createdAt: { type: Date, default: Date.now, index: true },
+    settledAt: { type: Date },
+});
 
 // Check if the 'BetSlip' model has already been compiled by Mongoose.
 // If it has, use the existing model; otherwise, compile and register the new one.
-module.exports = mongoose.models.BetSlip ? mongoose.model("BetSlip") : mongoose.model("BetSlip", betSlipSchema);
+module.exports = mongoose.models.BetSlip ? mongoose.model("BetSlip") : mongoose.model("BetSlip", BetSlipSchema);

@@ -5,9 +5,7 @@ const { placeBetSchema } = require("../validations/betValidation");
 const { validateBody } = require("../middlewares/validator");
 const auth = require("../middlewares/auth");
 
-router.post("/place", auth, validateBody(placeBetSchema), betController.placeBet);
-router.post("/settle/:slipId", betController.settleBet);
-
-router.get("/history", auth, betController.getBetHistory);
+router.post("/place", auth, betController.placeBet);
+router.get("/history", auth, betController.getBettingHistory);
 
 module.exports = router;

@@ -1,4 +1,4 @@
-const BetSlip = require("../models/betslipModel");
+const BetSlip = require("../models/betSlipModel");
 const downlineService = require("../services/downlineService");
 
 /**
@@ -15,8 +15,8 @@ exports.getDownlineBets = async (req, res) => {
 
         // 1. Validate Input
         const { betType } = req.params;
-        if (!["single", "parlay", "all"].includes(betType)) {
-            return res.status(400).json({ error: "Invalid bet type specified. Must be 'single', 'parlay', or 'all'." });
+        if (!["single", "parlay"].includes(betType)) {
+            return res.status(400).json({ error: "Invalid bet type specified. Must be 'single', 'parlay' " });
         }
 
         const loggedInUserId = req.user._id;
@@ -52,6 +52,10 @@ exports.getDownlineBets = async (req, res) => {
             .skip(skip)
             .limit(limit)
             .populate("user", "username role")
+            .populate({
+                path: "legs.match",
+                model: "Match",
+            })
             .select("-__v -updatedAt");
 
         res.json({
@@ -71,7 +75,13 @@ exports.checkSlipExists = async (req, res) => {
     try {
         const { slipId } = req.params;
 
-        const exists = await BetSlip.findOne({ slipId: slipId }).lean();
+        const exists = await BetSlip.findOne({ slipId: slipId })
+            .populate({
+                path: "legs.match",
+                model: "Match",
+            })
+            .populate("user", "username role")
+            .lean();
 
         if (exists) {
             // Return 200 OK if the slip is found
