@@ -1,6 +1,10 @@
 /**
  * Calculates the outcome and multiplier for a single bet leg (Handicap/Body or Over/Under).
- * * @param {Object} leg - The individual BetLeg object from the BetSlip.
+ *
+ * NOTE: This version is simplified to only return 'won' or 'lost' (and 'push' is now 'lost' or handled as 'won' if a positive margin exists).
+ * All half-win/half-loss outcomes have been removed or resolved to a full win/loss.
+ *
+ * @param {Object} leg - The individual BetLeg object from the BetSlip.
  * @param {Object} score - The final score object for the relevant period (e.g., {home: 5, away: 2}).
  * @returns {{outcome: string, multiplier: number}}
  */
@@ -12,187 +16,105 @@ const calculateLegOutcome = (leg, score) => {
 
     const { betCategory, market, line } = leg;
 
-    // Determine the relevant score difference (Home vs Away for Body, Total for Over/Under)
-    let comparisonValue; // This is the value compared against the line.
-    let lineNumeric = parseFloat(line.replace(/[+-]/g, "")); // Clean line value (e.g., " -2" -> 2)
+    let comparisonValue;
+    // Clean line value (e.g., " -2.5" -> 2.5)
+    let lineNumeric = parseFloat(line.replace(/[+-]/g, ""));
 
     if (betCategory === "body") {
-        // Body (Asian Handicap) calculation is based on difference
+        // Body (Asian Handicap)
         comparisonValue = score.home - score.away;
 
         // Adjust the line for the chosen market
         if (market === "home") {
-            lineNumeric = -lineNumeric; // Home -2 means comparing score diff against -2
+            // Home -2.5: score_diff must be > -2.5 to win.
+            lineNumeric = -lineNumeric;
         } else if (market === "away") {
-            lineNumeric = lineNumeric; // Away +2 means comparing score diff against +2
+            // Away +2.5: score_diff must be < +2.5 to win.
+            lineNumeric = lineNumeric;
         }
 
         // Actual difference in score based on the bet line
         const difference = comparisonValue + lineNumeric;
 
-        // --- BODY CALCULATION LOGIC ---
-        if (difference > 0.25) {
-            // Win by 0.5 or more
+        // --- SIMPLIFIED BODY CALCULATION LOGIC ---
+        // A full win requires the difference to be positive
+        if (difference > 0) {
             return { outcome: "won", multiplier: 1.0 };
-        } else if (difference < -0.25) {
-            // Lose by 0.5 or more
-            return { outcome: "lost", multiplier: 0.0 };
-        } else if (difference > 0 && difference <= 0.25) {
-            // Half-Win (e.g., diff = 0.25)
-            return { outcome: "half-won", multiplier: 0.5 };
-        } else if (difference < 0 && difference >= -0.25) {
-            // Half-Lose (e.g., diff = -0.25)
-            return { outcome: "half-lost", multiplier: -0.5 };
         } else {
-            // Exactly 0 difference (Push)
-            return { outcome: "push", multiplier: 0.0 };
+            // Any result that is exactly on the line (push) or a loss is now a loss.
+            return { outcome: "lost", multiplier: 0.0 };
         }
     } else if (betCategory === "overUnder") {
-        // Over/Under calculation is based on total score
+        // Over/Under
         comparisonValue = score.home + score.away;
-
-        // --- OVER/UNDER CALCULATION LOGIC ---
-
-        // Adjust the line (e.g., if line is 4)
         const difference = comparisonValue - lineNumeric;
 
+        // --- SIMPLIFIED OVER/UNDER CALCULATION LOGIC ---
         if (market === "over") {
-            if (difference > 0.25) {
-                // Over wins (score > line + 0.5)
+            // Over wins if the total score is strictly greater than the line.
+            if (difference > 0) {
                 return { outcome: "won", multiplier: 1.0 };
-            } else if (difference < -0.25) {
-                // Over loses (score < line - 0.5)
-                return { outcome: "lost", multiplier: 0.0 };
-            } else if (difference > 0 && difference <= 0.25) {
-                // Half-Win (score = line + 0.25)
-                return { outcome: "half-won", multiplier: 0.5 };
-            } else if (difference < 0 && difference >= -0.25) {
-                // Half-Lose (score = line - 0.25)
-                return { outcome: "half-lost", multiplier: -0.5 };
             } else {
-                // Exactly 0 difference (score = line)
-                return { outcome: "push", multiplier: 0.0 };
+                // Total score is exactly the line (push) or less is a loss.
+                return { outcome: "lost", multiplier: 0.0 };
             }
         } else if (market === "under") {
-            // Under outcomes are the inverse of Over outcomes
-            if (difference < -0.25) {
-                // Under wins (score < line - 0.5)
+            // Under wins if the total score is strictly less than the line.
+            if (difference < 0) {
                 return { outcome: "won", multiplier: 1.0 };
-            } else if (difference > 0.25) {
-                // Under loses (score > line + 0.5)
-                return { outcome: "lost", multiplier: 0.0 };
-            } else if (difference < 0 && difference >= -0.25) {
-                // Half-Win (score = line - 0.25)
-                return { outcome: "half-won", multiplier: 0.5 };
-            } else if (difference > 0 && difference <= 0.25) {
-                // Half-Lose (score = line + 0.25)
-                return { outcome: "half-lost", multiplier: -0.5 };
             } else {
-                // Exactly 0 difference (score = line)
-                return { outcome: "push", multiplier: 0.0 };
+                // Total score is exactly the line (push) or more is a loss.
+                return { outcome: "lost", multiplier: 0.0 };
             }
         }
     }
 
-    // For other categories like 'correctScore', the logic is simpler: won (1.0) or lost (0.0)
-    // You would implement that logic here if needed.
+    // Default return for uncategorized or non-simplified bets (e.g., Correct Score)
+    // Assuming 'correctScore' is simple win (1.0) or lose (0.0)
+    // The default assumption is a loss if no logic matches.
     return { outcome: "lost", multiplier: 0.0 };
 };
 
+// ------------------------------------------------------------------
+// The finalizeSlipSettlement function is now much simpler.
+// Since legs can only be 'won' or 'lost', we only need to check for a single 'lost' leg.
+// ------------------------------------------------------------------
+
 /**
  * Calculates the final outcome and financial results for an entire BetSlip (Single or Parlay).
+ *
+ * NOTE: This version is simplified for 'won' or 'lost' outcomes only.
+ *
  * @param {Object} betSlip - The BetSlip object with all legs settled.
  * @returns {{status: string, profit: number, payout: number}}
  */
 const finalizeSlipSettlement = (betSlip) => {
     const { betType, stake, legs } = betSlip;
 
-    // Step 1: Check overall status of the slip based on legs
-    let overallStatus = "won"; // Start by assuming a win
+    let overallStatus = "won";
+    let finalOddsMultiplier = 1;
 
-    // Array of all final multipliers (1.0, 0.5, -0.5, 0.0)
-    const legMultipliers = legs.map((leg) => leg.payoutMultiplier);
+    // Check for a loss in any leg (multiplier of 0.0)
+    const hasLoss = legs.some((leg) => leg.payoutMultiplier === 0.0);
 
-    // Check for a loss/half-loss in any leg
-    if (legMultipliers.some((m) => m === 0.0 || m === -0.5)) {
+    if (hasLoss) {
         overallStatus = "lost";
-    } else if (legMultipliers.some((m) => m === 0.5)) {
-        // If no full losses, but there are half wins, the slip is still a 'won' status
-        // but the odds calculation handles the final profit.
-        overallStatus = "won";
-    }
-
-    // Check for push (only if all legs are push, which is rare for parlay)
-    if (legMultipliers.every((m) => m === 0.0)) {
-        overallStatus = "push";
-    }
-
-    // Step 2: Calculate Total Payout and Profit
-    let profit = 0;
-    let payout = 0;
-
-    if (overallStatus === "lost") {
-        payout = 0;
-        profit = -stake;
-    } else if (overallStatus === "push") {
-        payout = stake;
-        profit = 0;
+        finalOddsMultiplier = 0; // Ensures payout logic below yields 0
     } else {
-        // For Won (including half-won legs)
-
-        let finalOddsMultiplier = 1;
+        // Since there are only 'won' or 'lost' outcomes now, and there are no losses,
+        // all legs must have been 'won'.
 
         if (betType === "single" && legs.length === 1) {
-            // Single Bet calculation
-            const leg = legs[0];
-            if (leg.outcome === "won") {
-                finalOddsMultiplier = leg.odds;
-            } else if (leg.outcome === "half-won") {
-                // Formula: Stake + (Odds * 0.5)
-                finalOddsMultiplier = 1 + (leg.odds - 1) * 0.5;
-            } else if (leg.outcome === "half-lost") {
-                // Formula: Stake - (Stake * 0.5)
-                finalOddsMultiplier = 0.5;
-            } else {
-                // Should be covered by lost/push check above, but as a safeguard:
-                finalOddsMultiplier = 0;
-            }
+            finalOddsMultiplier = legs[0].odds;
         } else if (betType === "parlay") {
-            // Parlay Bet calculation: Multiply adjusted odds
-
-            finalOddsMultiplier = legs.reduce((acc, leg) => {
-                let adjustedOdds = 1;
-
-                if (leg.outcome === "won") {
-                    adjustedOdds = leg.odds;
-                } else if (leg.outcome === "half-won") {
-                    // Half-win in parlay: (Odds - 1) * 0.5 + 1
-                    adjustedOdds = 1 + (leg.odds - 1) / 2;
-                } else if (leg.outcome === "half-lost") {
-                    adjustedOdds = 0.5; // Half-lost makes the odds 0.5
-                } else if (leg.outcome === "push") {
-                    adjustedOdds = 1; // Push means odds remain 1.0 (doesn't affect cumulative odds)
-                } else if (leg.outcome === "lost") {
-                    // A single loss instantly fails the entire parlay
-                    return 0;
-                }
-
-                return acc * adjustedOdds;
-            }, 1);
-
-            // If any leg was a full loss, finalOddsMultiplier will be 0.
-            if (finalOddsMultiplier === 0) {
-                overallStatus = "lost";
-                payout = 0;
-                profit = -stake;
-                return { status: overallStatus, profit, payout };
-            }
+            // Parlay Bet calculation: Multiply all winning odds
+            finalOddsMultiplier = legs.reduce((acc, leg) => acc * leg.odds, 1);
         }
-
-        // Final Payout calculation for successful (won/partial) bets
-        payout = stake * finalOddsMultiplier;
-        profit = payout - stake;
     }
+
+    // Final Payout calculation
+    const payout = stake * finalOddsMultiplier;
+    const profit = payout - stake;
 
     return { status: overallStatus, profit: profit, payout: payout };
 };

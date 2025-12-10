@@ -14,7 +14,7 @@ router.use("/bets", require("./betRoute"));
 
 router.use("/betlist", require("./betlistRoute"));
 
-// router.use("/winlose-report", require("./reportRoute"));
+router.use("/winlose-report", require("./winloseReportRoute"));
 
 router.use("/match-report", require("./matchReportRoute"));
 
