@@ -1,7 +1,8 @@
 const Account = require("../models/accountModel");
-const Balance = require("../models/balanceModel");
 const CommissionTransaction = require("../models/commissionTransactionModel");
 const { getCommissionField } = require("../utils/commissionMap");
+const balanceService = require("./balanceService");
+
 /**
  * Traverses the hierarchy from the Agent up to the top and calculates the spread commission.
  * (This function is crucial for determining the % rate earned by each upline.)
@@ -82,24 +83,8 @@ async function distributeCommissions(session, slip, commissionEarnings) {
 
         // 2. Credit Commission to Agent Balances
         for (const transaction of transactionsToInsert) {
-            // Use findOneAndUpdate with $inc for safe, atomic update within the transaction
-            const updatedBalance = await Balance.findOneAndUpdate(
-                { account: transaction.user },
-                {
-                    $inc: {
-                        cashBalance: transaction.amount,
-                        accountBalance: transaction.amount,
-                    },
-                },
-                { new: true, session: session }
-            );
-
-            if (!updatedBalance) {
-                // Critical: If an agent's balance document is missing, fail the transaction
-                throw new Error(`Balance document not found for commission recipient: ${transaction.user}`);
-            }
-
-            console.log(`[COMMISSION] Credited commission of ${transaction.amount} to account: ${transaction.user}`);
+            // REPLACED: Original manual Balance.findOneAndUpdate logic
+            await balanceService.creditCommission(transaction.user, transaction.amount, session);
         }
     }
 

@@ -1,10 +1,9 @@
 const BetSlip = require("../models/betSlipModel");
 const Match = require("../models/matchModel");
-const Balance = require("../models/balanceModel");
 const mongoose = require("mongoose");
 const betCalculator = require("../utils/betCalculator");
 const commissionService = require("./commissionService");
-
+const balanceService = require("./balanceService");
 /**
  * Finds all BetSlips that are pending settlement for a list of finished matches
  * and updates their status and payout, handling financial transactions and commissions.
@@ -87,18 +86,10 @@ exports.processSettlement = async (finishedMatchIds) => {
                 // Save BetSlip update within the transaction
                 await slip.save({ session });
 
-                // B. Credit User Account Balance if Won/Half-Won/Push
+                // B. Credit User Account Balance if Won
                 if (slip.payout > 0) {
-                    const userBalance = await Balance.findOne({ account: slip.user._id }).session(session);
-
-                    if (userBalance) {
-                        userBalance.cashBalance += slip.payout;
-                        userBalance.accountBalance += slip.payout;
-                        await userBalance.save({ session });
-                        console.log(`[SETTLEMENT] Credited ${slip.user.username} with Payout: ${slip.payout}.`);
-                    } else {
-                        throw new Error(`Balance document not found for user: ${slip.user._id}`);
-                    }
+                    await balanceService.creditPayout(slip.user._id, slip.payout, session); // <-- Refactored
+                    console.log(`[SETTLEMENT] Credited ${slip.user.username} with Payout: ${slip.payout}.`);
                 } else {
                     console.log(`[SETTLEMENT] Slip ${slip._id} settled as ${slip.status}. No payout needed.`);
                 }
