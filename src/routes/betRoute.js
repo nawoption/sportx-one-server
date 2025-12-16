@@ -7,5 +7,6 @@ const auth = require("../middlewares/auth");
 
 router.post("/place", auth, validateBody(PlaceBetSchema), betController.placeBet);
 router.get("/history", auth, betController.getBettingHistory);
+router.get("/history/:slipId", auth, betController.getBetDetail);
 
 module.exports = router;

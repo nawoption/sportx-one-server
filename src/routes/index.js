@@ -20,4 +20,6 @@ router.use("/match-report", require("./matchReportRoute"));
 
 router.use("/matches", require("./matchRoute"));
 
+router.use("/balance-transaction", require("./balanceTransactionRoute"));
+
 module.exports = router;

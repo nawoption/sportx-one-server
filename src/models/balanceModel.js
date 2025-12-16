@@ -10,7 +10,6 @@ const balanceSchema = new mongoose.Schema(
         },
         cashBalance: { type: Number, default: 0 },
         accountBalance: { type: Number, default: 0 },
-        commissionBalance: { type: Number, default: 0 },
     },
     { timestamps: true }
 );

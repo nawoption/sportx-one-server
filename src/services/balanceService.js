@@ -1,46 +1,52 @@
 const Balance = require("../models/balanceModel");
-const mongoose = require("mongoose");
+const BalanceTransaction = require("../models/balanceTransactionModel");
 
-/**
- * Debits the stake amount from a user's balance within a transactional session.
- * @param {mongoose.ObjectId} userId - The ID of the user account.
- * @param {number} stake - The amount to debit.
- * @param {mongoose.Session} session - The active mongoose session.
- * @returns {Promise<Object>} The updated Balance document.
- */
-exports.debitStake = async (userId, stake, session) => {
-    // We use findOneAndUpdate with $inc for atomic update validation
+// ----------------------
+// DEBIT STAKE
+// ----------------------
+exports.debitStake = async (userId, stake, betSlipId, session) => {
+    const balanceBefore = await Balance.findOne({ account: userId }).session(session);
+
+    if (!balanceBefore || balanceBefore.cashBalance < stake) {
+        throw new Error("Insufficient cash balance.");
+    }
+
     const updatedBalance = await Balance.findOneAndUpdate(
-        {
-            account: userId,
-            cashBalance: { $gte: stake }, // Ensure sufficient funds before debiting
-        },
+        { account: userId },
         {
             $inc: {
                 cashBalance: -stake,
                 accountBalance: -stake,
             },
         },
-        { new: true, session: session }
+        { new: true, session }
     );
 
-    if (!updatedBalance) {
-        // This implicitly handles both "Balance document not found" AND "Insufficient funds"
-        throw new Error("Insufficient cash balance or balance document not found.");
-    }
+    // ✅ Create transaction record
+    await BalanceTransaction.create(
+        [
+            {
+                user: userId,
+                betSlip: betSlipId,
+                type: "Bet",
+                amount: -stake,
+                balanceBefore: balanceBefore.cashBalance,
+                balanceAfter: updatedBalance.cashBalance,
+            },
+        ],
+        { session }
+    );
 
     return updatedBalance;
 };
 
-/**
- * Credits the payout amount to a user's balance within a transactional session.
- * @param {mongoose.ObjectId} userId - The ID of the user account.
- * @param {number} payout - The amount to credit.
- * @param {mongoose.Session} session - The active mongoose session.
- * @returns {Promise<Object>} The updated Balance document.
- */
-exports.creditPayout = async (userId, payout, session) => {
-    if (payout <= 0) return; // Do nothing if there's no payout
+// ----------------------
+// CREDIT PAYOUT
+// ----------------------
+exports.creditPayout = async (userId, payout, betSlipId, session) => {
+    if (payout <= 0) return;
+
+    const balanceBefore = await Balance.findOne({ account: userId }).session(session);
 
     const updatedBalance = await Balance.findOneAndUpdate(
         { account: userId },
@@ -50,24 +56,27 @@ exports.creditPayout = async (userId, payout, session) => {
                 accountBalance: payout,
             },
         },
-        { new: true, session: session }
+        { new: true, session }
     );
 
-    if (!updatedBalance) {
-        throw new Error(`Balance document not found for user: ${userId}`);
-    }
+    // ✅ Create transaction record
+    await BalanceTransaction.create(
+        [
+            {
+                user: userId,
+                betSlip: betSlipId,
+                type: "Won",
+                amount: payout,
+                balanceBefore: balanceBefore.cashBalance,
+                balanceAfter: updatedBalance.cashBalance,
+            },
+        ],
+        { session }
+    );
 
-    console.log(`[BALANCE_SERVICE] Credited payout of ${payout} to user ${userId}.`);
     return updatedBalance;
 };
 
-/**
- * Credits commission to an agent's balance within a transactional session.
- * @param {mongoose.ObjectId} agentId - The ID of the agent account.
- * @param {number} amount - The commission amount to credit.
- * @param {mongoose.Session} session - The active mongoose session.
- * @returns {Promise<Object>} The updated Balance document.
- */
 exports.creditCommission = async (agentId, amount, session) => {
     if (amount <= 0) return;
 

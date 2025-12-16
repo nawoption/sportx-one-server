@@ -55,7 +55,6 @@ exports.processSettlement = async (finishedMatchIds) => {
             }
 
             const { outcome, cashDelta } = betCalculator.calculateLegOutcome(slip.betSystem, leg, score, slip.stake);
-            console.log(outcome, cashDelta);
 
             leg.outcome = outcome;
             leg.cashDelta = cashDelta;
@@ -84,8 +83,7 @@ exports.processSettlement = async (finishedMatchIds) => {
 
             // B️⃣ Credit user balance
             if (slip.payout > 0) {
-                await balanceService.creditPayout(slip.user._id, slip.payout, session);
-
+                await balanceService.creditPayout(slip.user._id, slip.payout, slip._id, session);
                 console.log(`[SETTLEMENT] Credited ${slip.user.username} with Payout: ${slip.payout}`);
             }
 

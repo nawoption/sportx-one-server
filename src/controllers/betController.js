@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const balanceService = require("../services/balanceService");
 const { v4: uuidv4 } = require("uuid");
 const betValidationService = require("../services/betValidationService");
+const BalanceTransaction = require("../models/balanceTransactionModel");
 
 exports.placeBet = async (req, res) => {
     const session = await mongoose.startSession();
@@ -35,17 +36,7 @@ exports.placeBet = async (req, res) => {
             return res.status(400).json({ success: false, message: "Parlay must have 2 or more legs." });
         }
 
-        // 2. Check Balance and Debit Stake
-        try {
-            // Debit must happen after validation to avoid debiting for an invalid bet.
-            await balanceService.debitStake(userId, stake, session);
-        } catch (error) {
-            // Catches "Insufficient cash balance or balance document not found."
-            await session.abortTransaction();
-            return res.status(400).json({ error: error.message });
-        }
-
-        // 3. Create and Save the new BetSlip instance
+        // 2. Create and Save the new BetSlip instance
         const slipId = `${uuidv4().split("-")[0].toUpperCase()}`;
 
         const newBetSlip = new BetSlip({
@@ -61,6 +52,15 @@ exports.placeBet = async (req, res) => {
 
         // Save BetSlip within the transaction
         await newBetSlip.save({ session });
+
+        // 3. Check Balance and Debit Stake
+        try {
+            await balanceService.debitStake(userId, stake, newBetSlip._id, session);
+        } catch (error) {
+            // Catches "Insufficient cash balance or balance document not found."
+            await session.abortTransaction();
+            return res.status(400).json({ error: error.message });
+        }
 
         // Commit the transaction
         await session.commitTransaction();
@@ -123,5 +123,50 @@ exports.getBettingHistory = async (req, res) => {
     } catch (err) {
         console.error("Error fetching betting history:", err);
         res.status(500).json({ success: false, error: "Internal Server Error." });
+    }
+};
+
+exports.getBetDetail = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const { slipId } = req.params;
+
+        // 1️⃣ Load bet slip (ownership check)
+        const betSlip = await BetSlip.findOne({
+            _id: slipId,
+            user: userId,
+        })
+            .populate({
+                path: "legs.match",
+                model: "Match",
+            })
+            .lean();
+
+        if (!betSlip) {
+            return res.status(404).json({
+                success: false,
+                message: "Bet slip not found",
+            });
+        }
+
+        // 2️⃣ Load related balance transactions
+        const transactions = await BalanceTransaction.find({
+            betSlip: betSlip._id,
+            user: userId,
+        })
+            .sort({ createdAt: 1 }) // Bet → Won
+            .lean();
+
+        return res.json({
+            success: true,
+            bet: betSlip,
+            transactions,
+        });
+    } catch (err) {
+        console.error("Error fetching bet detail:", err);
+        res.status(500).json({
+            success: false,
+            error: "Internal Server Error",
+        });
     }
 };
