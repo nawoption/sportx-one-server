@@ -9,7 +9,7 @@ exports.placeBet = async (req, res) => {
     session.startTransaction();
     try {
         const userId = req.user._id;
-        const { betType, stake, legs } = req.body;
+        const { betSystem, betType, stake, legs } = req.body;
 
         if (!stake || stake <= 0 || !legs || legs.length === 0) {
             await session.abortTransaction();
@@ -19,7 +19,7 @@ exports.placeBet = async (req, res) => {
         // 1. Validate Legs and Calculate Total Odds
         let validationResult;
         try {
-            validationResult = await betValidationService.validateAndCalculateOdds(legs);
+            validationResult = await betValidationService.validateAndCalculateOdds(betSystem, betType, legs);
         } catch (error) {
             await session.abortTransaction();
             // Return specific validation error message from the service
@@ -51,6 +51,7 @@ exports.placeBet = async (req, res) => {
         const newBetSlip = new BetSlip({
             user: userId,
             betType: betType,
+            betSystem,
             slipId: slipId,
             stake: stake,
             legs: validatedLegs,

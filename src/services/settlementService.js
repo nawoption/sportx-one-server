@@ -4,34 +4,26 @@ const mongoose = require("mongoose");
 const betCalculator = require("../utils/betCalculator");
 const commissionService = require("./commissionService");
 const balanceService = require("./balanceService");
-/**
- * Finds all BetSlips that are pending settlement for a list of finished matches
- * and updates their status and payout, handling financial transactions and commissions.
- * * @param {Array<string>} finishedMatchIds - Array of apiMatchIds that have completed.
- */
+
 exports.processSettlement = async (finishedMatchIds) => {
-    if (finishedMatchIds.length === 0) {
-        console.log("No finished matches to settle.");
-        return [];
-    }
+    if (!finishedMatchIds.length) return [];
 
     console.log(`[SETTLEMENT] Starting settlement for ${finishedMatchIds.length} matches.`);
 
-    // 1. Fetch all completed match data required for calculation
+    // 1️⃣ Load completed match scores
     const completedMatches = await Match.find({
-        apiMatchId: { $in: finishedMatchIds },
+        _id: { $in: finishedMatchIds },
     }).lean();
 
     const matchDataMap = new Map();
     completedMatches.forEach((match) => {
-        // Map: apiMatchId -> { full_time, half_time } scores
-        matchDataMap.set(match.apiMatchId, {
+        matchDataMap.set(match._id.toString(), {
             full_time: match.scores.full_time,
-            half_time: match.scores.live, // Assuming 'live' contains the half-time score
+            half_time: match.scores.live,
         });
     });
 
-    // 2. Find all pending bet slips that contain any of these match IDs
+    // 2️⃣ Find pending slips
     const pendingSlips = await BetSlip.find({
         status: "pending",
         "legs.match": { $in: finishedMatchIds },
@@ -43,74 +35,72 @@ exports.processSettlement = async (finishedMatchIds) => {
     const settledSlips = [];
 
     for (const slip of pendingSlips) {
-        // --- 3. Settle Legs and Calculate Final Results ---
-        let needsSettlement = true;
-        // Check if all legs can be settled
+        let canSettle = true;
+
+        // 3️⃣ Settle each leg
         for (const leg of slip.legs) {
-            if (leg.outcome !== "pending") continue;
+            if (leg.outcome !== "unsettled") continue;
 
-            const matchScoreData = matchDataMap.get(leg.match);
-            if (!matchScoreData) {
-                needsSettlement = false;
+            const scoreData = matchDataMap.get(leg.match.toString());
+            if (!scoreData) {
+                canSettle = false;
                 break;
             }
 
-            const score = leg.period === "full-time" ? matchScoreData.full_time : matchScoreData.half_time;
+            const score = leg.period === "full-time" ? scoreData.full_time : scoreData.half_time;
 
-            if (score && score.home !== undefined) {
-                const { outcome, multiplier } = betCalculator.calculateLegOutcome(leg, score);
-                leg.outcome = outcome;
-                leg.payoutMultiplier = multiplier;
-            } else {
-                needsSettlement = false;
+            if (!score || score.home === undefined) {
+                canSettle = false;
                 break;
             }
+
+            const { outcome, cashDelta } = betCalculator.calculateLegOutcome(slip.betSystem, leg, score, slip.stake);
+            console.log(outcome, cashDelta);
+
+            leg.outcome = outcome;
+            leg.cashDelta = cashDelta;
         }
 
-        // --- 4. Finalize BetSlip and Execute Transaction (Payout & Commission) ---
-        if (needsSettlement && slip.legs.every((leg) => leg.outcome !== "pending")) {
-            const finalResults = betCalculator.finalizeSlipSettlement(slip);
+        // 4️⃣ Finalize slip if all legs settled
+        if (!canSettle || slip.legs.some((l) => l.outcome === "unsettled")) {
+            console.warn(`[SETTLEMENT] Skipping slip ${slip._id}. Incomplete data.`);
+            continue;
+        }
 
-            // Start a new session and transaction for atomicity
-            const session = await mongoose.startSession();
-            session.startTransaction();
+        const finalResult = betCalculator.finalizeSlipSettlement(slip);
 
-            try {
-                // A. Update the slip status and financial data
-                slip.status = finalResults.status;
-                slip.profit = finalResults.profit;
-                slip.payout = finalResults.payout;
-                slip.conditions = "paidout"; // Standardized condition
-                slip.settledAt = new Date();
+        const session = await mongoose.startSession();
+        session.startTransaction();
 
-                // Save BetSlip update within the transaction
-                await slip.save({ session });
+        try {
+            // A️⃣ Update BetSlip
+            slip.status = finalResult.status;
+            slip.payout = finalResult.payout;
+            slip.profit = finalResult.profit;
+            slip.conditions = "paidout";
+            slip.settledAt = new Date();
 
-                // B. Credit User Account Balance if Won
-                if (slip.payout > 0) {
-                    await balanceService.creditPayout(slip.user._id, slip.payout, session); // <-- Refactored
-                    console.log(`[SETTLEMENT] Credited ${slip.user.username} with Payout: ${slip.payout}.`);
-                } else {
-                    console.log(`[SETTLEMENT] Slip ${slip._id} settled as ${slip.status}. No payout needed.`);
-                }
+            await slip.save({ session });
 
-                // C. Commission Distribution
-                await commissionService.processCommissionDistribution(session, slip);
+            // B️⃣ Credit user balance
+            if (slip.payout > 0) {
+                await balanceService.creditPayout(slip.user._id, slip.payout, session);
 
-                // Commit the transaction (BetSlip, Balance, and CommissionTransactions are all saved)
-                await session.commitTransaction();
-                settledSlips.push(slip);
-                console.log(`[SETTLEMENT] Transaction complete for Slip ID: ${slip._id}`);
-            } catch (transactionError) {
-                // If anything fails (DB save, Balance update, Commission insert, etc.), abort the transaction
-                await session.abortTransaction();
-                console.error(`[SETTLEMENT] Transaction failed for BetSlip ${slip._id}:`, transactionError.message);
-            } finally {
-                session.endSession();
+                console.log(`[SETTLEMENT] Credited ${slip.user.username} with Payout: ${slip.payout}`);
             }
-        } else {
-            // Log if a slip cannot be settled due to missing score data (should be rare)
-            console.warn(`[SETTLEMENT] Skipping slip ${slip._id}. Not all legs could be settled.`);
+
+            // C️⃣ Commission
+            await commissionService.processCommissionDistribution(session, slip);
+
+            await session.commitTransaction();
+            session.endSession();
+
+            settledSlips.push(slip);
+            console.log(`[SETTLEMENT] Completed Slip ${slip._id}`);
+        } catch (err) {
+            await session.abortTransaction();
+            session.endSession();
+            console.error(`[SETTLEMENT] Failed for Slip ${slip._id}:`, err.message);
         }
     }
 

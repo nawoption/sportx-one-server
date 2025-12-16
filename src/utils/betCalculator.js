@@ -1,122 +1,173 @@
-/**
- * Calculates the outcome and multiplier for a single bet leg (Handicap/Body or Over/Under).
- *
- * NOTE: This version is simplified to only return 'won' or 'lost' (and 'push' is now 'lost' or handled as 'won' if a positive margin exists).
- * All half-win/half-loss outcomes have been removed or resolved to a full win/loss.
- *
- * @param {Object} leg - The individual BetLeg object from the BetSlip.
- * @param {Object} score - The final score object for the relevant period (e.g., {home: 5, away: 2}).
- * @returns {{outcome: string, multiplier: number}}
- */
-const calculateLegOutcome = (leg, score) => {
-    if (!score) {
-        console.warn(`Score data missing for match ${leg.match} period ${leg.period}`);
-        return { outcome: "pending", multiplier: 0 };
+// ---------------------------------------
+// 1️⃣ CALCULATE LEG OUTCOME (PER LEG)
+// ---------------------------------------
+const calculateLegOutcome = (betSystem, leg, score, stake) => {
+    const home = score.home;
+    const away = score.away;
+    const handicap = Number(leg.line);
+
+    let coverMargin = 0;
+
+    // ---------- BODY ----------
+    if (leg.betCategory === "body") {
+        coverMargin = leg.market === "home" ? home + handicap - away : away + handicap - home;
     }
 
-    const { betCategory, market, line } = leg;
-
-    let comparisonValue;
-    // Clean line value (e.g., " -2.5" -> 2.5)
-    let lineNumeric = parseFloat(line.replace(/[+-]/g, ""));
-
-    if (betCategory === "body") {
-        // Body (Asian Handicap)
-        comparisonValue = score.home - score.away;
-
-        // Adjust the line for the chosen market
-        if (market === "home") {
-            // Home -2.5: score_diff must be > -2.5 to win.
-            lineNumeric = -lineNumeric;
-        } else if (market === "away") {
-            // Away +2.5: score_diff must be < +2.5 to win.
-            lineNumeric = lineNumeric;
-        }
-
-        // Actual difference in score based on the bet line
-        const difference = comparisonValue + lineNumeric;
-
-        // --- SIMPLIFIED BODY CALCULATION LOGIC ---
-        // A full win requires the difference to be positive
-        if (difference > 0) {
-            return { outcome: "won", multiplier: 1.0 };
-        } else {
-            // Any result that is exactly on the line (push) or a loss is now a loss.
-            return { outcome: "lost", multiplier: 0.0 };
-        }
-    } else if (betCategory === "overUnder") {
-        // Over/Under
-        comparisonValue = score.home + score.away;
-        const difference = comparisonValue - lineNumeric;
-
-        // --- SIMPLIFIED OVER/UNDER CALCULATION LOGIC ---
-        if (market === "over") {
-            // Over wins if the total score is strictly greater than the line.
-            if (difference > 0) {
-                return { outcome: "won", multiplier: 1.0 };
-            } else {
-                // Total score is exactly the line (push) or less is a loss.
-                return { outcome: "lost", multiplier: 0.0 };
-            }
-        } else if (market === "under") {
-            // Under wins if the total score is strictly less than the line.
-            if (difference < 0) {
-                return { outcome: "won", multiplier: 1.0 };
-            } else {
-                // Total score is exactly the line (push) or more is a loss.
-                return { outcome: "lost", multiplier: 0.0 };
-            }
-        }
+    // ---------- OVER / UNDER ----------
+    else if (leg.betCategory === "overUnder") {
+        const total = home + away;
+        coverMargin = leg.market === "over" ? total - handicap : handicap - total;
     }
 
-    // Default return for uncategorized or non-simplified bets (e.g., Correct Score)
-    // Assuming 'correctScore' is simple win (1.0) or lose (0.0)
-    // The default assumption is a loss if no logic matches.
-    return { outcome: "lost", multiplier: 0.0 };
+    // ================= MYANMAR =================
+    if (betSystem === "myanmar") {
+        // FULL WIN / FULL LOSE
+        if (coverMargin > 0) {
+            return {
+                outcome: "won",
+                cashDelta: stake, // +100
+            };
+        }
+
+        if (coverMargin < 0) {
+            return {
+                outcome: "lost",
+                cashDelta: -stake, // -100
+            };
+        }
+
+        // -------- LINE EQUAL (PRICE MODE) --------
+        const price = Number(leg.payoutRate); // e.g. 6 or 94
+
+        // Which side wins on price?
+        const isPriceWin =
+            (leg.betCategory === "body" && leg.market === "away") ||
+            (leg.betCategory === "overUnder" && leg.market === "under");
+
+        if (isPriceWin) {
+            // WIN PRICE
+            return {
+                outcome: "won",
+                cashDelta: price,
+            };
+        }
+
+        // LOSE PRICE → lose (100 − price)
+        return {
+            outcome: "lost",
+            cashDelta: -(100 - price),
+        };
+    }
+
+    // ================= INTERNATIONAL =================
+    if (coverMargin > 0) {
+        return { outcome: "won", multiplier: leg.odds };
+    }
+    if (coverMargin === 0) {
+        return { outcome: "push", multiplier: 1 };
+    }
+    return { outcome: "lost", multiplier: 0 };
 };
 
-// ------------------------------------------------------------------
-// The finalizeSlipSettlement function is now much simpler.
-// Since legs can only be 'won' or 'lost', we only need to check for a single 'lost' leg.
-// ------------------------------------------------------------------
+// ---------------------------------------
+// 2️⃣ FINALIZE SLIP SETTLEMENT
+// ---------------------------------------
 
-/**
- * Calculates the final outcome and financial results for an entire BetSlip (Single or Parlay).
- *
- * NOTE: This version is simplified for 'won' or 'lost' outcomes only.
- *
- * @param {Object} betSlip - The BetSlip object with all legs settled.
- * @returns {{status: string, profit: number, payout: number}}
- */
+const SINGLE_COMMISSION_RATE = 0.05;
+const PARLAY_COMMISSION_RATE = 0.2;
+
 const finalizeSlipSettlement = (betSlip) => {
-    const { betType, stake, legs } = betSlip;
+    const { betSystem, betType, stake, legs } = betSlip;
 
-    let overallStatus = "won";
-    let finalOddsMultiplier = 1;
+    // ================= MYANMAR =================
+    if (betSystem === "myanmar") {
+        // ---------- SINGLE ----------
+        if (betType === "single") {
+            const leg = legs[0];
 
-    // Check for a loss in any leg (multiplier of 0.0)
-    const hasLoss = legs.some((leg) => leg.payoutMultiplier === 0.0);
+            // full lose
+            if (leg.cashDelta === -stake) {
+                return {
+                    status: "lost",
+                    payout: 0,
+                    profit: -stake,
+                };
+            }
 
-    if (hasLoss) {
-        overallStatus = "lost";
-        finalOddsMultiplier = 0; // Ensures payout logic below yields 0
-    } else {
-        // Since there are only 'won' or 'lost' outcomes now, and there are no losses,
-        // all legs must have been 'won'.
+            let payout = stake + leg.cashDelta;
 
-        if (betType === "single" && legs.length === 1) {
-            finalOddsMultiplier = legs[0].odds;
-        } else if (betType === "parlay") {
-            // Parlay Bet calculation: Multiply all winning odds
-            finalOddsMultiplier = legs.reduce((acc, leg) => acc * leg.odds, 1);
+            if (leg.cashDelta > 0) {
+                const commission = Math.floor(leg.cashDelta * SINGLE_COMMISSION_RATE);
+                payout -= commission;
+            }
+
+            return {
+                status: payout > stake ? "won" : "lost",
+                payout,
+                profit: payout - stake,
+            };
         }
+
+        // ---------- PARLAY ----------
+        // ❌ ANY FULL LOSE → FULL LOSE
+        const hasFullLose = legs.some((l) => l.cashDelta === -stake);
+
+        if (hasFullLose) {
+            return {
+                status: "lost",
+                payout: 0,
+                profit: -stake,
+            };
+        }
+
+        // 1️⃣ Multiply FULL WINS
+        let base = stake;
+        for (const leg of legs) {
+            if (leg.cashDelta === stake) {
+                base *= leg.odds; // ×2
+            }
+        }
+
+        // 2️⃣ Add partial (+80 / −30)
+        let partialDelta = 0;
+        for (const leg of legs) {
+            // partial = not full win / not full lose
+            if (Math.abs(leg.cashDelta) !== stake) {
+                const percent = Math.abs(leg.cashDelta);
+                const sign = leg.cashDelta > 0 ? 1 : -1;
+
+                // 🔥 APPLY ON BASE, NOT STAKE
+                partialDelta += base * (percent / 100) * sign;
+            }
+        }
+
+        let payout = base + partialDelta;
+
+        // 3️⃣ Apply commission
+        if (payout > stake) {
+            payout = Math.floor(payout * (1 - PARLAY_COMMISSION_RATE));
+        }
+
+        return {
+            status: payout > stake ? "won" : "lost",
+            payout,
+            profit: payout - stake,
+        };
     }
 
-    // Final Payout calculation
-    const payout = stake * finalOddsMultiplier;
-    const profit = payout - stake;
+    // ================= INTERNATIONAL =================
+    let payout = stake;
+    for (const leg of legs) {
+        payout *= leg.odds;
+    }
 
-    return { status: overallStatus, profit: profit, payout: payout };
+    payout = Math.floor(payout);
+
+    return {
+        status: payout > 0 ? "won" : "lost",
+        payout,
+        profit: payout - stake,
+    };
 };
 
 module.exports = {

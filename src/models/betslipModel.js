@@ -15,7 +15,7 @@ const BetLegSchema = new mongoose.Schema(
         betCategory: {
             type: String,
             required: true,
-            enum: ["body", "overUnder", "correctScore", "mixParlay"], // Simplified categories
+            enum: ["body", "overUnder"],
         },
         market: {
             type: String,
@@ -29,16 +29,22 @@ const BetLegSchema = new mongoose.Schema(
         },
 
         // Line and Odds at the time of placing the bet (Crucial for Settlement)
-        line: { type: String, required: true }, // The handicap line (e.g., "-2" or "4")
-        odds: { type: Number, required: true }, // The price (e.g., 0.90 or 1.25)
-
-        // Settlement Data (Updated by SettlementService)
+        line: { type: String, required: true },
+        odds: { type: Number, required: true },
         outcome: {
             type: String,
-            enum: ["unsettled", "won", "lost", "half-won", "half-lost", "push", "cancelled"],
+            enum: ["unsettled", "won", "lost", "cancelled"],
             default: "unsettled",
         },
-        payoutMultiplier: { type: Number, default: 0 }, // 1.0 for won, 0.5 for half-won, 0 for lost/push/half-lost
+        payoutMultiplier: { type: Number, default: 0 },
+        cashDelta: {
+            type: Number,
+            default: 0,
+        },
+        payoutRate: {
+            type: Number,
+            default: 0,
+        },
     },
     { _id: false }
 );
@@ -57,6 +63,13 @@ const BetSlipSchema = new mongoose.Schema({
         required: true,
         unique: true,
     },
+    betSystem: {
+        type: String,
+        required: true,
+        enum: ["myanmar", "international"],
+        default: "myanmar",
+    },
+
     // Bet Details
     betType: {
         type: String,
@@ -73,7 +86,7 @@ const BetSlipSchema = new mongoose.Schema({
     status: {
         type: String,
         required: true,
-        enum: ["pending", "won", "lost", "half-won", "half-lost", "push", "cancelled"],
+        enum: ["pending", "won", "lost", "cancelled"],
         default: "pending",
         index: true,
     },

@@ -1,6 +1,6 @@
 const Account = require("../models/accountModel");
 const CommissionTransaction = require("../models/commissionTransactionModel");
-const { getCommissionField } = require("../utils/commissionMap");
+const { getCommissionFieldByBetType } = require("../utils/commissionMap");
 const balanceService = require("./balanceService");
 
 /**
@@ -64,9 +64,7 @@ async function distributeCommissions(session, slip, commissionEarnings) {
     let transactionsToInsert = [];
 
     if (commissionEarnings.length > 0) {
-        // Determine the commission category field (assuming first leg dictates commission field)
-        const rawCategory = slip.legs[0].betCategory; // category is already cased correctly from the BET_CATEGORY_MAP usage in the main service
-        const betCategoryField = getCommissionField(rawCategory);
+        const betCategoryField = getCommissionFieldByBetType(slip.betType);
 
         transactionsToInsert = commissionEarnings.map((comm) => ({
             user: comm.accountId,
@@ -94,22 +92,34 @@ async function distributeCommissions(session, slip, commissionEarnings) {
 exports.processCommissionDistribution = async (session, slip) => {
     const bettingUser = slip.user;
     const agentId = bettingUser.upline;
+    const betType = slip.betType;
 
     if (!agentId) {
         console.log(`[COMMISSION] Skipping commission: User ${bettingUser.username} has no upline.`);
         return;
     }
 
-    const rawCategory = slip.legs[0].betCategory;
-    const betCategoryField = getCommissionField(rawCategory);
+    // --- CRITICAL DEFENSIVE CHECK ---
+    if (!betType) {
+        console.error(`[COMMISSION] BetSlip ${slip._id} is missing required 'betType' for commission calculation.`);
+        return;
+    }
+    // ---------------------------------
+
+    // Determine the commission field name based ONLY on betType
+    const betCategoryField = getCommissionFieldByBetType(betType);
 
     if (!betCategoryField) {
-        console.warn(`[COMMISSION] Skipping commission: Category map missing for ${rawCategory}.`);
+        console.warn(`[COMMISSION] Skipping commission: BetType '${betType}' is not mapped to a commission field.`);
         return;
     }
 
     // Calculate the potential earnings for all uplines
-    const commissionEarnings = await calculateHierarchyCommissions(agentId, betCategoryField, slip.stake);
+    const commissionEarnings = await calculateHierarchyCommissions(
+        agentId,
+        betCategoryField, // Use the determined field
+        slip.stake
+    );
 
     // Record transactions and update balances
     await distributeCommissions(session, slip, commissionEarnings);

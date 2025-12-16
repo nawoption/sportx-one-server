@@ -14,13 +14,10 @@ const BetLegSchema = Joi.object({
         }),
 
     // betCategory: The type of market (used to fetch the correct odds structure).
-    betCategory: Joi.string()
-        .valid("body", "overUnder", "correctScore", "mixParlay") // Add all supported categories
-        .required()
-        .messages({
-            "any.required": "Bet category is required.",
-            "any.only": "Invalid bet category.",
-        }),
+    betCategory: Joi.string().valid("body", "overUnder").required().messages({
+        "any.required": "Bet category is required.",
+        "any.only": "Invalid bet category.",
+    }),
 
     // market: The chosen side of the bet (e.g., 'home', 'away', 'over', 'under').
     market: Joi.string().required().messages({
@@ -36,6 +33,7 @@ const BetLegSchema = Joi.object({
 
 // --- 2. Main Bet Placement Schema (for req.body) ---
 const PlaceBetSchema = Joi.object({
+    betSystem: Joi.string().valid("myanmar", "international").required(),
     betType: Joi.string().valid("single", "parlay").required().messages({
         "any.required": "Bet type is required.",
         "any.only": 'Invalid bet type. Must be "single" or "parlay".',
