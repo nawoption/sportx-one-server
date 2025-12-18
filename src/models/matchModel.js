@@ -65,8 +65,8 @@ const MatchSchema = new mongoose.Schema({
     // Timestamp for last update
     lastUpdatedAt: { type: Date, default: Date.now },
 
-    // Optional: Flag to indicate if match has been settled
-    // matchSettled: { type: Boolean, default: false, index: true },
+    // Flag to indicate if match has been settled
+    matchSettled: { type: Boolean, default: false, index: true },
 });
 
 // Update timestamp before saving

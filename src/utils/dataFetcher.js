@@ -1,9 +1,10 @@
 const cron = require("node-cron");
 const axios = require("axios");
 const matchService = require("../services/matchService");
+const config = require("../config");
 
-const API_KEY = "demoapi";
-const BASE_URL = "https://htayapi.com/mmk-autokyay/v3";
+const API_KEY = config.env.ODDS_API_KEY;
+const BASE_URL = config.env.ODDS_API_URL;
 
 const processMatches = async (apiMatches) => {
     if (!apiMatches || apiMatches.length === 0) return;
@@ -70,9 +71,9 @@ const fetchAndSaveAllData = async () => {
 };
 
 const startCronJob = () => {
-    cron.schedule("*/5 * * * *", fetchAndSaveAllData, {
+    cron.schedule(config.env.CORN_SCHEDULE_FETCH_MATCHES, fetchAndSaveAllData, {
         scheduled: true,
-        timezone: "Asia/Yangon", // Myanmar Timezone
+        timezone: config.env.TIMEZONE,
     });
 
     console.log("Cron Job for external match data fetching started. Runs every 5 minutes (MMT).");
