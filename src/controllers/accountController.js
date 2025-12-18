@@ -2,6 +2,7 @@ const Account = require("../models/accountModel");
 const LimitSetting = require("../models/limitSettingModel");
 const CommissionSetting = require("../models/commissionSettingModel");
 const Balance = require("../models/balanceModel");
+const validationService = require("../services/accountValidationService");
 
 const { hashPassword } = require("../utils/helper");
 
@@ -15,22 +16,37 @@ const allowedUpline = {
 };
 
 module.exports = {
-    // REGISTER (used by Admin/Super/Senior/Master/Agent)
     createAccount: async (req, res) => {
         try {
             const { username, password, contact, role, upline, limit, commission } = req.body;
-            // Check role permissions
+            const parentId = upline || req.user._id;
+
+            // 1. Role Permission Check
             if (!allowedUpline[req.user.role]?.includes(role)) {
-                return res.status(403).json({
-                    message: `You cannot create ${role}`,
-                });
+                return res.status(403).json({ message: `You cannot create ${role}` });
             }
-            // Check if username already exists
-            const exists = await Account.findOne({ username: req.user.username + username });
+
+            // 2. Fetch Parent Account
+            const parent = await Account.findById(parentId);
+            if (!parent) {
+                return res.status(404).json({ message: "Upline account not found" });
+            }
+
+            // 3. VALIDATION: Check if child settings exceed parent settings
+            try {
+                await validationService.validateChildAccountSettings(parent, limit, commission);
+            } catch (validationErr) {
+                return res.status(400).json({ message: validationErr.message });
+            }
+
+            // 4. Duplicate Username Check
+            const fullUsername = req.user.username + username;
+            const exists = await Account.findOne({ username: fullUsername });
             if (exists) {
                 return res.status(400).json({ message: "Username already exists" });
             }
 
+            // 5. Create Settings and Account
             const limitSetting = new LimitSetting({ ...limit, createdBy: req.user._id });
             await limitSetting.save();
 
@@ -39,31 +55,33 @@ module.exports = {
 
             const hashedPassword = await hashPassword(password);
 
-            //  Create account
             const newAccount = await Account.create({
-                username: req.user.username + username,
+                username: fullUsername,
                 password: hashedPassword,
                 contact,
                 role,
-                upline: upline || req.user._id,
-                limitSetting,
-                commissionSetting,
+                upline: parentId,
+                limitSetting: limitSetting._id,
+                commissionSetting: commissionSetting._id,
             });
 
-            //  Update upline downlines
-            const parent = await Account.findById(upline || req.user._id);
+            // 6. Update Upline's Downline List
             parent.downlines.push(newAccount._id);
             await parent.save();
 
-            // Create balance
+            // 7. Create Balance record
             await Balance.create({ account: newAccount._id });
 
             res.json({
                 message: "Account created successfully",
-                user: newAccount,
+                user: {
+                    id: newAccount._id,
+                    username: newAccount.username,
+                    role: newAccount.role,
+                },
             });
         } catch (err) {
-            console.log(err);
+            console.error(err);
             res.status(500).json({ message: err.message });
         }
     },
