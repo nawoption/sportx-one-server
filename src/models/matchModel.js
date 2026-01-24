@@ -13,8 +13,13 @@ const OddsSchema = new mongoose.Schema(
             over_price: { type: Number }, // e.g., 3
             under_price: { type: Number }, // e.g., 97
         },
+        one_x_two: {
+            home_price: { type: Number },
+            draw_price: { type: Number },
+            away_price: { type: Number },
+        },
     },
-    { _id: false }
+    { _id: false },
 );
 
 const MatchScoreDetailSchema = new mongoose.Schema(
@@ -22,7 +27,7 @@ const MatchScoreDetailSchema = new mongoose.Schema(
         home: { type: Number, default: 0 },
         away: { type: Number, default: 0 },
     },
-    { _id: false }
+    { _id: false },
 );
 
 // --- 3. Match Main Schema ---

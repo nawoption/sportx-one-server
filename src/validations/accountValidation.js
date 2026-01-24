@@ -9,7 +9,7 @@ const accountCreateSchema = Joi.object({
     role: Joi.string().valid("Admin", "Super", "Senior", "Master", "Agent", "User").required(),
     upline: Joi.string().optional(),
     limit: limitValidationSchema.required(),
-    commission: commissionValidationSchema.required(),
+    commission: commissionValidationSchema.optional(),
 });
 
 module.exports = {

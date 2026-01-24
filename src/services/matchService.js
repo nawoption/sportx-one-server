@@ -33,6 +33,11 @@ const mapApiDataToMatchModel = (apiMatchData) => {
                 over_price: parseFloat(apiMatchData.odds.over_under.over_price),
                 under_price: parseFloat(apiMatchData.odds.over_under.under_price),
             },
+            one_x_two: {
+                home_price: parseFloat(apiMatchData.odds.one_x_two.home_price),
+                draw_price: parseFloat(apiMatchData.odds.one_x_two.draw_price),
+                away_price: parseFloat(apiMatchData.odds.one_x_two.away_price),
+            },
         },
     };
 
