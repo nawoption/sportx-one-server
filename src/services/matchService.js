@@ -15,6 +15,7 @@ const mapApiDataToMatchModel = (apiMatchData) => {
         awayTeamMM: apiMatchData.away_team_mm,
         startTime: new Date(apiMatchData.match_time),
         status: apiMatchData.status.toLowerCase(),
+        odds_team: apiMatchData.odds_team,
 
         scores: {
             full_time: apiMatchData.scores.full_time ? mapScores(apiMatchData.scores.full_time) : undefined,
@@ -53,6 +54,7 @@ const upsertMatch = async (apiMatchData) => {
         if (existingMatch) {
             existingMatch.status = matchData.status;
             existingMatch.scores = matchData.scores;
+            existingMatch.odds_team = matchData.odds_team;
             existingMatch.odds = matchData.odds;
             await existingMatch.save();
             return existingMatch;

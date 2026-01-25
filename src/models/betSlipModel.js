@@ -15,12 +15,12 @@ const BetLegSchema = new mongoose.Schema(
         betCategory: {
             type: String,
             required: true,
-            enum: ["body", "overUnder"],
+            enum: ["body", "overUnder", "one_x_two"],
         },
         market: {
             type: String,
             required: true,
-            enum: ["home", "away", "over", "under"],
+            enum: ["home", "away", "over", "under", "draw"],
         },
         period: {
             type: String,
@@ -46,7 +46,7 @@ const BetLegSchema = new mongoose.Schema(
             default: 0,
         },
     },
-    { _id: false }
+    { _id: false },
 );
 
 // --- 2. Bet Slip Main Schema ---

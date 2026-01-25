@@ -14,14 +14,14 @@ const BetLegSchema = Joi.object({
         }),
 
     // betCategory: The type of market (used to fetch the correct odds structure).
-    betCategory: Joi.string().valid("body", "overUnder").required().messages({
+    betCategory: Joi.string().valid("body", "overUnder", "one_x_two").required().messages({
         "any.required": "Bet category is required.",
         "any.only": "Invalid bet category.",
     }),
 
-    // market: The chosen side of the bet (e.g., 'home', 'away', 'over', 'under').
+    // market: The chosen side of the bet (e.g., 'home', 'away', 'over', 'under', 'draw').
     market: Joi.string().required().messages({
-        "any.required": "Market (home/away/over/under) is required.",
+        "any.required": "Market (home/away/over/under/draw) is required.",
     }),
 
     // period: The time frame of the bet (e.g., 'full-time', 'half-time').

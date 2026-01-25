@@ -34,16 +34,16 @@ const fetchAndSaveAllData = async () => {
         console.error("[CRON] Error fetching Moung data:", error.message);
     }
 
-    // // 4. Fetch Results Data (Final Status and Scores)
-    // try {
-    //     const resultsResponse = await axios.get(`${BASE_URL}/results?key=${API_KEY}`);
-    //     if (Array.isArray(resultsResponse.data.data)) {
-    //         await processMatches(resultsResponse.data.data);
-    //         console.log(`[CRON] Successfully processed ${resultsResponse.data.data.length} Result matches.`);
-    //     }
-    // } catch (error) {
-    //     console.error("[CRON] Error fetching Results data:", error.message);
-    // }
+    // 2. Fetch Results Data (Final Status and Scores)
+    try {
+        const resultsResponse = await axios.get(`${BASE_URL}/result?api_key=${API_KEY}`);
+        if (Array.isArray(resultsResponse.data.data)) {
+            await processMatches(resultsResponse.data.data);
+            console.log(`[CRON] Successfully processed ${resultsResponse.data.data.length} Result matches.`);
+        }
+    } catch (error) {
+        console.error("[CRON] Error fetching Results data:", error.message);
+    }
 
     console.log(`[CRON] Data fetch job finished.`);
 };

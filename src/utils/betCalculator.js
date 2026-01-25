@@ -19,6 +19,18 @@ const calculateLegOutcome = (betSystem, leg, score, stake) => {
         coverMargin = leg.market === "over" ? total - handicap : handicap - total;
     }
 
+    // ---------- ONE X TWO ----------
+    else if (leg.betCategory === "one_x_two") {
+        let result = "draw";
+        if (home > away) result = "home";
+        if (away > home) result = "away";
+        if (leg.market === result) {
+            return { outcome: "won", multiplier: leg.odds };
+        } else {
+            return { outcome: "lost", multiplier: 0 };
+        }
+    }
+
     // ================= MYANMAR =================
     if (betSystem === "myanmar") {
         // FULL WIN / FULL LOSE
@@ -58,15 +70,6 @@ const calculateLegOutcome = (betSystem, leg, score, stake) => {
             cashDelta: -(100 - price),
         };
     }
-
-    // ================= INTERNATIONAL =================
-    if (coverMargin > 0) {
-        return { outcome: "won", multiplier: leg.odds };
-    }
-    if (coverMargin === 0) {
-        return { outcome: "push", multiplier: 1 };
-    }
-    return { outcome: "lost", multiplier: 0 };
 };
 
 // ---------------------------------------

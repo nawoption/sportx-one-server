@@ -14,7 +14,7 @@ exports.validateAndCalculateOdds = async (betSystem, betType, legs) => {
     // 1️⃣ Fetch matches
     const matches = await Match.find({
         _id: { $in: matchIds },
-        // status: { $ne: "completed" },
+        status: { $ne: "completed" },
     })
         .select("odds")
         .lean();
@@ -58,27 +58,32 @@ exports.validateAndCalculateOdds = async (betSystem, betType, legs) => {
             }
         }
 
-        // 3️⃣ Validation
-        if (line === undefined || payoutRate === undefined) {
-            throw new Error(`Invalid betting market for match ${leg.match}`);
+        // ================= ONE X TWO =================
+        else if (leg.betCategory === "one_x_two") {
+            if (leg.market === "home") {
+                payoutRate = match.odds.one_x_two.home_price;
+            } else if (leg.market === "away") {
+                payoutRate = match.odds.one_x_two.away_price;
+            } else if (leg.market === "draw") {
+                payoutRate = match.odds.one_x_two.draw_price;
+            }
+            leg.odds = payoutRate; // Lock the multiplier
+        }
+
+        // Validation
+        if (payoutRate === undefined) {
+            throw new Error(`Invalid market ${leg.market} for ${leg.betCategory}`);
         }
 
         // 4️⃣ Inject locked values
         leg.line = String(line);
         leg.payoutRate = Number(payoutRate);
 
-        // ================= MYANMAR =================
+        // 5️⃣ Calculate Total Odds
         if (betSystem === "myanmar") {
             leg.odds = betType === "single" ? MYANMAR_SINGLE_ODDS : MYANMAR_PARLAY_ODDS;
-
             totalOdds *= leg.odds;
-        }
-
-        // ================= INTERNATIONAL =================
-        if (betSystem === "international") {
-            if (!leg.odds || leg.odds <= 1) {
-                throw new Error("International odds missing or invalid");
-            }
+        } else if (betSystem === "international") {
             totalOdds *= leg.odds;
         }
 

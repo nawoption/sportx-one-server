@@ -64,6 +64,8 @@ const MatchSchema = new mongoose.Schema({
         live: { type: MatchScoreDetailSchema, default: () => ({}) }, // Live scores
     },
 
+    odds_team: { type: String, enum: ["home", "away"], default: "home" },
+
     // Odds Data
     odds: { type: OddsSchema, default: () => ({}) },
 
