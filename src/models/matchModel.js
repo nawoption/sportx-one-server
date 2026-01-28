@@ -61,7 +61,7 @@ const MatchSchema = new mongoose.Schema({
     // Results/Scores
     scores: {
         full_time: { type: MatchScoreDetailSchema, default: () => ({}) },
-        live: { type: MatchScoreDetailSchema, default: () => ({}) }, // Live scores
+        half_time: { type: MatchScoreDetailSchema, default: () => ({}) },
     },
 
     odds_team: { type: String, enum: ["home", "away"], default: "home" },

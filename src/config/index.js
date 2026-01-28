@@ -13,7 +13,7 @@ const config = {
         DEFAULT_ADMIN_CONTACT: process.env.DEFAULT_ADMIN_CONTACT || "",
         ODDS_API_KEY: process.env.ODDS_API_KEY,
         ODDS_API_URL: process.env.ODDS_API_URL,
-        CORN_SCHEDULE_FETCH_MATCHES: process.env.CORN_SCHEDULE_FETCH_MATCHES || "*/5 * * * *",
+        CORN_SCHEDULE_FETCH_MATCHES: process.env.CORN_SCHEDULE_FETCH_MATCHES || "*/10 * * * * *",
         TIMEZONE: process.env.TIMEZONE || "Asia/Yangon",
         CORN_SETTlE_BETS: process.env.CORN_SETTlE_BETS || "* * * * *",
     },

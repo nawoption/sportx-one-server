@@ -19,7 +19,7 @@ const mapApiDataToMatchModel = (apiMatchData) => {
 
         scores: {
             full_time: apiMatchData.scores.full_time ? mapScores(apiMatchData.scores.full_time) : undefined,
-            live: apiMatchData.scores.live ? mapScores(apiMatchData.scores.live) : undefined,
+            half_time: apiMatchData.scores.half_time ? mapScores(apiMatchData.scores.half_time) : undefined,
         },
 
         odds: {

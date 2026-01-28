@@ -36,7 +36,7 @@ const startSettlementJob = () => {
         {
             scheduled: true,
             timezone: config.env.TIMEZONE,
-        }
+        },
     );
 
     console.log("Bet Settlement Cron Job started. Runs every 1 minute (MMT).");

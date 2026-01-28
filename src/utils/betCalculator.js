@@ -159,17 +159,42 @@ const finalizeSlipSettlement = (betSlip) => {
     }
 
     // ================= INTERNATIONAL =================
-    let payout = stake;
+    let rawPayout = stake;
+
+    const hasLost = legs.some((l) => l.outcome === "lost");
+    if (hasLost) {
+        return {
+            status: "lost",
+            payout: 0,
+            profit: -stake,
+        };
+    }
+    // Multiply using multiplier if exists, otherwise odds
+
     for (const leg of legs) {
-        payout *= leg.odds;
+        rawPayout *= leg.odds;
     }
 
-    payout = Math.floor(payout);
+    rawPayout = Math.floor(rawPayout);
+    const rawProfit = rawPayout - stake;
 
+    if (rawProfit > 0) {
+        // APPLY COMMISSION ON PROFIT ONLY
+        const commRate = betType === "single" ? SINGLE_COMMISSION_RATE : PARLAY_COMMISSION_RATE;
+        const commission = Math.floor(rawProfit * commRate);
+        const finalPayout = rawPayout - commission;
+
+        return {
+            status: "won",
+            payout: finalPayout,
+            profit: finalPayout - stake,
+        };
+    }
+    // LOSE or BREAK EVEN
     return {
-        status: payout > 0 ? "won" : "lost",
-        payout,
-        profit: payout - stake,
+        status: "lost",
+        payout: rawPayout,
+        profit: rawPayout - stake,
     };
 };
 

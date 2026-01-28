@@ -21,17 +21,15 @@ const processMatches = async (apiMatches) => {
 const fetchAndSaveAllData = async () => {
     console.log(`[CRON] Starting data fetch job at ${new Date().toISOString()}`);
 
-    // --- API Endpoints and Corresponding Status/Data Type ---
-
     // 1. Fetch Moung Data (Pre-match Main Odds)
     try {
         const moungResponse = await axios.get(`${BASE_URL}/?api_key=${API_KEY}`);
         if (Array.isArray(moungResponse.data.data)) {
             await processMatches(moungResponse.data.data);
-            console.log(`[CRON] Successfully processed ${moungResponse.data.data.length} Moung matches.`);
+            // console.log(`[CRON] Successfully processed ${moungResponse.data.data.length} Moung matches.`);
         }
     } catch (error) {
-        console.error("[CRON] Error fetching Moung data:", error.message);
+        // console.error("[CRON] Error fetching Moung data:", error.message);
     }
 
     // 2. Fetch Results Data (Final Status and Scores)
@@ -39,7 +37,7 @@ const fetchAndSaveAllData = async () => {
         const resultsResponse = await axios.get(`${BASE_URL}/result?api_key=${API_KEY}`);
         if (Array.isArray(resultsResponse.data.data)) {
             await processMatches(resultsResponse.data.data);
-            console.log(`[CRON] Successfully processed ${resultsResponse.data.data.length} Result matches.`);
+            // console.log(`[CRON] Successfully processed ${resultsResponse.data.data.length} Result matches.`);
         }
     } catch (error) {
         console.error("[CRON] Error fetching Results data:", error.message);
@@ -54,7 +52,7 @@ const startCronJob = () => {
         timezone: config.env.TIMEZONE,
     });
 
-    console.log("Cron Job for external match data fetching started. Runs every 5 minutes (MMT).");
+    console.log("Cron Job for external match data fetching started. Runs every 10 seconds (MMT).");
 
     fetchAndSaveAllData();
 };

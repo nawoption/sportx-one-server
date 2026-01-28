@@ -19,7 +19,7 @@ exports.processSettlement = async (finishedMatchIds) => {
     completedMatches.forEach((match) => {
         matchDataMap.set(match._id.toString(), {
             full_time: match.scores.full_time,
-            half_time: match.scores.live,
+            half_time: match.scores.half_time,
         });
     });
 

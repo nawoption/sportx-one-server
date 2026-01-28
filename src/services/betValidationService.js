@@ -14,7 +14,7 @@ exports.validateAndCalculateOdds = async (betSystem, betType, legs) => {
     // 1️⃣ Fetch matches
     const matches = await Match.find({
         _id: { $in: matchIds },
-        status: { $ne: "completed" },
+        status: "active",
     })
         .select("odds")
         .lean();
