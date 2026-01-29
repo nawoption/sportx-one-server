@@ -22,4 +22,6 @@ router.use("/matches", require("./matchRoute"));
 
 router.use("/balance-transaction", require("./balanceTransactionRoute"));
 
+router.use("/dashboard", require("./dashboardRoute"));
+
 module.exports = router;
